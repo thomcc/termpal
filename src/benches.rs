@@ -302,7 +302,6 @@ items! {
         });
     }
 
-
     #[bench]
     fn nearest256_many_standalone_f32x4(b: &mut test::Bencher) {
         let common_lab = COMMON
@@ -360,7 +359,6 @@ items! {
             }
         });
     }
-
 }
 
 #[cfg(all(
@@ -373,6 +371,7 @@ items! {
     use crate::imp::simd_x86;
 
     #[bench]
+    #[cfg(feature = "simd-avx")]
     fn nearest256_single_with_lab_conv_avx(b: &mut test::Bencher) {
         assert!(core_detect::is_x86_feature_detected!("avx"));
         let mut i = 0;
@@ -380,7 +379,7 @@ items! {
             let (r, g, b) = black_box(COMMON[i]);
             i = (i + 1) % COMMON.len();
             unsafe {
-                let n = simd_x86::nearest_ansi256_avx(Lab::from_srgb8(r, g, b));
+                let n = unsafe { simd_x86::nearest_ansi256_unsafe_avx(Lab::from_srgb8(r, g, b)) };
                 black_box(n);
             }
         });
@@ -399,6 +398,7 @@ items! {
 
     #[bench]
     #[cfg(feature = "88color")]
+    #[cfg(feature = "simd-avx")]
     fn nearest88_single_with_lab_conv_avx(b: &mut test::Bencher) {
         assert!(core_detect::is_x86_feature_detected!("avx"));
         let mut i = 0;
@@ -406,7 +406,7 @@ items! {
             let (r, g, b) = black_box(COMMON[i]);
             i = (i + 1) % COMMON.len();
             unsafe {
-                let n = simd_x86::nearest_ansi88_avx(Lab::from_srgb8(r, g, b));
+                let n = unsafe { simd_x86::nearest_ansi88_unsafe_avx(Lab::from_srgb8(r, g, b)) };
                 black_box(n);
             }
         });
@@ -425,6 +425,7 @@ items! {
     }
 
     #[bench]
+    #[cfg(feature = "simd-avx")]
     fn nearest256_single_standalone_avx(b: &mut test::Bencher) {
         assert!(core_detect::is_x86_feature_detected!("avx"));
         let mut i = 0;
@@ -436,7 +437,7 @@ items! {
             let (l, a, b) = black_box(common_lab[i]);
             i = (i + 1) % common_lab.len();
             unsafe {
-                let n = simd_x86::nearest_ansi256_unsafe_avx(Lab { l, a, b });
+                let n = unsafe { simd_x86::nearest_ansi256_unsafe_avx(Lab { l, a, b }) };
                 black_box(n);
             }
         });
@@ -457,6 +458,67 @@ items! {
         });
     }
 
+    #[bench]
+    fn nearest256_many_standalone_sse2(b: &mut test::Bencher) {
+        let common_lab = COMMON
+            .iter()
+            .map(|c| rgb2lab(c.0, c.1, c.2))
+            .collect::<Vec<_>>();
+        b.iter(|| {
+            for &(l, a, b) in &black_box(&common_lab)[..256] {
+                let n = simd_x86::nearest_ansi256_sse2(Lab { l, a, b });
+                black_box(n);
+            }
+        });
+    }
+
+    #[bench]
+    #[cfg(feature = "88color")]
+    fn nearest88_many_standalone_sse2(b: &mut test::Bencher) {
+        let common_lab = COMMON
+            .iter()
+            .map(|c| rgb2lab(c.0, c.1, c.2))
+            .collect::<Vec<_>>();
+        b.iter(|| {
+            for &(l, a, b) in &black_box(&common_lab)[..256] {
+                let n = simd_x86::nearest_ansi88_sse2(Lab { l, a, b });
+                black_box(n);
+            }
+        });
+    }
+
+    #[bench]
+    #[cfg(feature = "simd-avx")]
+    fn nearest256_many_standalone_avx(b: &mut test::Bencher) {
+        assert!(core_detect::is_x86_feature_detected!("avx"));
+        let common_lab = COMMON
+            .iter()
+            .map(|c| rgb2lab(c.0, c.1, c.2))
+            .collect::<Vec<_>>();
+        b.iter(|| {
+            for &(l, a, b) in &black_box(&common_lab)[..256] {
+                let n = unsafe { simd_x86::nearest_ansi256_unsafe_avx(Lab { l, a, b }) };
+                black_box(n);
+            }
+        });
+    }
+
+    #[bench]
+    #[cfg(feature = "simd-avx")]
+    #[cfg(feature = "88color")]
+    fn nearest88_many_standalone_avx(b: &mut test::Bencher) {
+        assert!(core_detect::is_x86_feature_detected!("avx"));
+        let common_lab = COMMON
+            .iter()
+            .map(|c| rgb2lab(c.0, c.1, c.2))
+            .collect::<Vec<_>>();
+        b.iter(|| {
+            for &(l, a, b) in &black_box(&common_lab)[..256] {
+                let n = unsafe { simd_x86::nearest_ansi88_unsafe_avx(Lab { l, a, b }) };
+                black_box(n);
+            }
+        });
+    }
 }
 
 static COMMON: [(u8, u8, u8); 361] = [

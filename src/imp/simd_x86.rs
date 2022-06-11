@@ -260,7 +260,7 @@ pub(crate) fn nearest_ansi256_sse2(l: Lab) -> u8 {
 
 #[target_feature(enable = "avx")]
 #[cfg(feature = "simd-avx")]
-#[cfg(any(test, feature = "__internals_for_benchmarking"))]
+#[cfg(any(test, benchmarking))]
 pub(crate) unsafe fn nearest_ansi256_unsafe_avx(l: Lab) -> u8 {
     let r = nearest_avx(l.l, l.a, l.b, &tab::LAB_ROWS_ANSI256);
     debug_assert!(r < 256, "{}", r);
@@ -269,7 +269,7 @@ pub(crate) unsafe fn nearest_ansi256_unsafe_avx(l: Lab) -> u8 {
 
 #[target_feature(enable = "avx")]
 #[cfg(all(feature = "simd-avx", feature = "88color"))]
-#[cfg(any(test, feature = "__internals_for_benchmarking"))]
+#[cfg(any(test, benchmarking))]
 pub(crate) unsafe fn nearest_ansi88_unsafe_avx(l: Lab) -> u8 {
     let r = nearest_avx(l.l, l.a, l.b, &tab::LAB_ROWS_ANSI88);
     debug_assert!(r < 88, "{}", r);

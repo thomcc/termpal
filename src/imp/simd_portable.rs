@@ -80,10 +80,10 @@ fn nearest_f32x4(l: f32, a: f32, b: f32, palette: &[Lab8]) -> usize {
             best_dists_y = ydists;
 
             // expand the new min distance to all 4 lanes of `best`.
-            best = f32x4::splat(best.min(mindists).reduce_min());
-            // best = best.min(mindists);
-            // best = best.min(core::simd::simd_swizzle!(best, [1, 0, 3, 2]));
-            // best = best.min(core::simd::simd_swizzle!(best, [2, 3, 0, 1]));
+            // best = f32x4::splat(best.min(mindists).reduce_min());
+            best = best.min(mindists);
+            best = best.min(core::simd::simd_swizzle!(best, [1, 0, 3, 2]));
+            best = best.min(core::simd::simd_swizzle!(best, [2, 3, 0, 1]));
         }
     }
     // TODO: this is dumb
@@ -170,10 +170,6 @@ fn nearest_f32x8(l: f32, a: f32, b: f32, palette: &[Lab8]) -> usize {
 
             // expand the new min distance to all 8 lanes of `best`.
             best = f32x8::splat(best.min(dists).reduce_min());
-            // best = _mm256_min_ps(best, dists);
-            // best = _mm256_min_ps(best, _mm256_permute_ps(best, shuf![1, 0, 3, 2]));
-            // best = _mm256_min_ps(best, _mm256_permute_ps(best, shuf![2, 3, 0, 1]));
-            // best = _mm256_min_ps(best, _mm256_permute2f128_ps(best, best, 1));
         }
     }
     // TODO: this is dumb

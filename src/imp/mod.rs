@@ -40,7 +40,7 @@ pub(crate) mod simd_x86;
 
 #[cfg(all(
     feature = "unstable-portable-simd",
-    not(any(target_arch = "x86_64", target_arch = "x86")),
+    any(benchmarking, not(any(target_arch = "x86_64", target_arch = "x86"))),
 ))]
 pub(crate) mod simd_portable;
 
