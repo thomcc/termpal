@@ -1,0 +1,31 @@
+[package]
+name = "termpal"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = ["simd"]
+
+# Support for 88 color terminals, like `xterm-88color`, `rxvt-88color`, etc. Off
+# by default, as they're fairly rare these days, and this reduces table size.
+88color = []
+
+# Use a SIMD-accelerated implementation, if available. On by default.
+simd = []
+
+# Use AVX instructions for the SIMD implementation if we can detect at compile
+# time that they're available. This is off by default, because AVX instructions
+# are a bit of a mixed bag. Until https://github.com/rust-lang/stdarch/pull/1155
+# stabilizes, the AVX isn't even faster than the SSE2 version either...
+simd-avx = ["simd"]
+
+# Use AVX instructions for the SIMD implementation if we can detect at runtime
+# (using `core_detect`) that they're available.
+simd-runtime-avx = ["simd-avx", "core_detect"]
+
+# __internals_for_benchmarking = ["simd-avx", "88color"]
+unstable-portable-simd = ["simd"]
+
+[dependencies]
+core_detect = { version = "1", optional = true }
+cfg-if = "1"
