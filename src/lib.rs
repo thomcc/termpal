@@ -21,6 +21,7 @@ pub fn nearest_ansi88(r: u8, g: u8, b: u8) -> u8 {
     imp::nearest_ansi88(r, g, b)
 }
 
+// #[cfg(feature = "uncached")]
 pub mod uncached {
     #[inline]
     pub fn nearest_ansi256(r: u8, g: u8, b: u8) -> u8 {
@@ -33,7 +34,3 @@ pub mod uncached {
         super::imp::nearest_ansi88_uncached(r, g, b)
     }
 }
-
-#[cfg(feature = "__internals_for_benchmarking")]
-#[cfg(all(feature = "simd", target_arch = "x86_64"))]
-pub mod __internals_for_benchmarking {}

@@ -386,17 +386,6 @@ items! {
     }
 
     #[bench]
-    fn nearest256_single_with_lab_conv_sse2(b: &mut test::Bencher) {
-        let mut i = 0;
-        b.iter(|| {
-            let (r, g, b) = black_box(COMMON[i]);
-            i = (i + 1) % COMMON.len();
-            let n = simd_x86::nearest_ansi256_sse2(Lab::from_srgb8(r, g, b));
-            black_box(n);
-        });
-    }
-
-    #[bench]
     #[cfg(feature = "88color")]
     #[cfg(feature = "simd-avx")]
     fn nearest88_single_with_lab_conv_avx(b: &mut test::Bencher) {
@@ -409,18 +398,6 @@ items! {
                 let n = unsafe { simd_x86::nearest_ansi88_unsafe_avx(Lab::from_srgb8(r, g, b)) };
                 black_box(n);
             }
-        });
-    }
-
-    #[bench]
-    #[cfg(feature = "88color")]
-    fn nearest88_single_with_lab_conv_sse2(b: &mut test::Bencher) {
-        let mut i = 0;
-        b.iter(|| {
-            let (r, g, b) = black_box(COMMON[i]);
-            i = (i + 1) % COMMON.len();
-            let n = simd_x86::nearest_ansi88_sse2(Lab::from_srgb8(r, g, b));
-            black_box(n);
         });
     }
 
@@ -440,6 +417,29 @@ items! {
                 let n = unsafe { simd_x86::nearest_ansi256_unsafe_avx(Lab { l, a, b }) };
                 black_box(n);
             }
+        });
+    }
+
+    #[bench]
+    fn nearest256_single_with_lab_conv_sse2(b: &mut test::Bencher) {
+        let mut i = 0;
+        b.iter(|| {
+            let (r, g, b) = black_box(COMMON[i]);
+            i = (i + 1) % COMMON.len();
+            let n = simd_x86::nearest_ansi256_sse2(Lab::from_srgb8(r, g, b));
+            black_box(n);
+        });
+    }
+
+    #[bench]
+    #[cfg(feature = "88color")]
+    fn nearest88_single_with_lab_conv_sse2(b: &mut test::Bencher) {
+        let mut i = 0;
+        b.iter(|| {
+            let (r, g, b) = black_box(COMMON[i]);
+            i = (i + 1) % COMMON.len();
+            let n = simd_x86::nearest_ansi88_sse2(Lab::from_srgb8(r, g, b));
+            black_box(n);
         });
     }
 
@@ -519,6 +519,84 @@ items! {
             }
         });
     }
+}
+
+#[cfg(all(
+    any(target_arch = "aarch64"),
+    target_feature = "neon",
+    feature = "simd",
+    not(miri),
+))]
+items! {
+    use crate::imp::simd_neon;
+
+    #[bench]
+    fn nearest256_single_with_lab_conv_neon(b: &mut test::Bencher) {
+        let mut i = 0;
+        b.iter(|| {
+            let (r, g, b) = black_box(COMMON[i]);
+            i = (i + 1) % COMMON.len();
+            let n = simd_neon::nearest_ansi256_neon(Lab::from_srgb8(r, g, b));
+            black_box(n);
+        });
+    }
+
+    #[bench]
+    #[cfg(feature = "88color")]
+    fn nearest88_single_with_lab_conv_neon(b: &mut test::Bencher) {
+        let mut i = 0;
+        b.iter(|| {
+            let (r, g, b) = black_box(COMMON[i]);
+            i = (i + 1) % COMMON.len();
+            let n = simd_neon::nearest_ansi88_neon(Lab::from_srgb8(r, g, b));
+            black_box(n);
+        });
+    }
+
+    #[bench]
+    fn nearest256_single_standalone_neon(b: &mut test::Bencher) {
+        let mut i = 0;
+        let common_lab = COMMON
+            .iter()
+            .map(|c| rgb2lab(c.0, c.1, c.2))
+            .collect::<Vec<_>>();
+        b.iter(|| {
+            let (l, a, b) = black_box(common_lab[i]);
+            i = (i + 1) % common_lab.len();
+            let n = simd_neon::nearest_ansi256_neon(Lab { l, a, b });
+            black_box(n);
+        });
+    }
+
+    #[bench]
+    fn nearest256_many_standalone_neon(b: &mut test::Bencher) {
+        let common_lab = COMMON
+            .iter()
+            .map(|c| rgb2lab(c.0, c.1, c.2))
+            .collect::<Vec<_>>();
+        b.iter(|| {
+            for &(l, a, b) in &black_box(&common_lab)[..256] {
+                let n = simd_neon::nearest_ansi256_neon(Lab { l, a, b });
+                black_box(n);
+            }
+        });
+    }
+
+    #[bench]
+    #[cfg(feature = "88color")]
+    fn nearest88_many_standalone_neon(b: &mut test::Bencher) {
+        let common_lab = COMMON
+            .iter()
+            .map(|c| rgb2lab(c.0, c.1, c.2))
+            .collect::<Vec<_>>();
+        b.iter(|| {
+            for &(l, a, b) in &black_box(&common_lab)[..256] {
+                let n = simd_neon::nearest_ansi88_neon(Lab { l, a, b });
+                black_box(n);
+            }
+        });
+    }
+
 }
 
 static COMMON: [(u8, u8, u8); 361] = [

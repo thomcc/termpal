@@ -44,6 +44,14 @@ pub(crate) mod simd_x86;
 ))]
 pub(crate) mod simd_portable;
 
+#[cfg(all(
+    feature = "simd",
+    target_arch = "aarch64",
+    target_feature = "neon",
+    not(miri)
+))]
+pub(crate) mod simd_neon;
+
 #[inline]
 pub(crate) const fn easychecks256(r: u8, g: u8, b: u8) -> Option<u8> {
     if r == g && g == b {

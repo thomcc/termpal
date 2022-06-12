@@ -22,7 +22,7 @@ use core::convert::Infallible as Never;
 use core::sync::atomic::{AtomicU32, Ordering::Relaxed};
 
 #[derive(Clone, Copy)]
-#[repr(transparent)]
+#[repr(C, align(128))]
 pub struct CacheTab<Tab: ?Sized>(Tab);
 
 // `EMPTY` needs to not encode something we'd actually insert. This value won't:
