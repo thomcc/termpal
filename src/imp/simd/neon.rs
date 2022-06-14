@@ -1,8 +1,13 @@
-use crate::imp::{lab::*, tab};
+use crate::imp::{oklab::*, tab};
 #[cfg(target_arch = "aarch64")]
 use core::arch::aarch64::*;
 
-#[cfg(not(target_feature = "neon"))]
+#[cfg(not(all(
+    feature = "simd",
+    target_arch = "aarch64",
+    target_feature = "neon",
+    not(miri)
+)))]
 compile_error!("shoulda checked");
 
 static_assert!(core::mem::size_of::<SimdRow>() == core::mem::size_of::<float32x4_t>() * 2);
@@ -16,7 +21,6 @@ pub(crate) unsafe fn nearest_neon(l: f32, a: f32, b: f32, palette: &[Lab8]) -> u
     static_assert!(core::mem::size_of::<Lab8>() == core::mem::size_of::<[[float32x4_t; 2]; 3]>());
     static_assert!(core::mem::align_of::<Lab8>() >= core::mem::align_of::<[[float32x4_t; 2]; 3]>());
 
-    let palette = palette.as_ref();
     // SAFETY: static assertions above prove safety.
     let chunks: &[[[float32x4_t; 2]; 3]] = core::slice::from_raw_parts(
         palette.as_ptr() as *const [[float32x4_t; 2]; 3],
@@ -41,9 +45,6 @@ pub(crate) unsafe fn nearest_neon(l: f32, a: f32, b: f32, palette: &[Lab8]) -> u
 
     let mut min_x = vdupq_n_f32(f32::INFINITY);
     let mut min_y = vdupq_n_f32(f32::INFINITY);
-
-    // uint32x4_t local_index = (uint32x4_t){0, 1, 2, 3};
-    // uint32x4_t index = (uint32x4_t){static_cast<uint32_t>(-1), static_cast<uint32_t>(-1), static_cast<uint32_t>(-1), static_cast<uint32_t>(-1)};
 
     for chunk in chunks.iter() {
         // chunk contains 8 Lab colors. compute the distance between `col` and
@@ -90,6 +91,7 @@ pub(crate) unsafe fn nearest_neon(l: f32, a: f32, b: f32, palette: &[Lab8]) -> u
         cur_index_x = vaddq_u32(cur_index_x, eight);
         cur_index_y = vaddq_u32(cur_index_y, eight);
     }
+
     let mask_xy = vcltq_f32(min_x, min_y);
     let min_xy = vbslq_f32(mask_xy, min_x, min_y);
     let min_idx_xy = vbslq_u32(mask_xy, best_idxs_x, best_idxs_y);
@@ -112,7 +114,7 @@ pub(crate) unsafe fn nearest_neon(l: f32, a: f32, b: f32, palette: &[Lab8]) -> u
 #[inline]
 #[cfg(feature = "88color")]
 #[cfg(target_feature = "neon")]
-pub(crate) fn nearest_ansi88_neon(l: Lab) -> u8 {
+pub(crate) fn nearest_ansi88_neon(l: OkLab) -> u8 {
     // Safety: Safe because we're guarded by the proper `cfg!(target_feature)`
     let r = unsafe { nearest_neon(l.l, l.a, l.b, &tab::LAB_ROWS_ANSI88) };
     debug_assert!(r < 88, "{}", r);
@@ -121,7 +123,7 @@ pub(crate) fn nearest_ansi88_neon(l: Lab) -> u8 {
 
 #[inline]
 #[cfg(target_feature = "neon")]
-pub(crate) fn nearest_ansi256_neon(l: Lab) -> u8 {
+pub(crate) fn nearest_ansi256_neon(l: OkLab) -> u8 {
     // Safety: Safe because we're guarded by the proper `cfg!(target_feature)`
     let r = unsafe { nearest_neon(l.l, l.a, l.b, &tab::LAB_ROWS_ANSI256) };
     debug_assert!(r < 256, "{}", r);
@@ -138,7 +140,7 @@ mod test {
         for r in 0..=255 {
             for g in 0..=255 {
                 for b in 0..=255 {
-                    let lab = Lab::from_srgb8(r, g, b);
+                    let lab = OkLab::from_srgb8(r, g, b);
                     let scalar256 = crate::imp::fallback::nearest_ansi256(lab);
                     assert_eq!(
                         super::nearest_ansi256_neon(lab),

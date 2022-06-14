@@ -31,7 +31,6 @@ pub(crate) unsafe fn nearest_sse2(l: f32, a: f32, b: f32, palette: &[Lab8]) -> u
     static_assert!(core::mem::size_of::<Lab8>() == core::mem::size_of::<[[__m128; 2]; 3]>());
     static_assert!(core::mem::align_of::<Lab8>() >= core::mem::align_of::<[[__m128; 2]; 3]>());
 
-    let palette = palette.as_ref();
     // SAFETY: static assertions above prove safety.
     let chunks: &[[[__m128; 2]; 3]] =
         core::slice::from_raw_parts(palette.as_ptr() as *const [[__m128; 2]; 3], palette.len());
@@ -135,7 +134,6 @@ pub(crate) unsafe fn nearest_avx(l: f32, a: f32, b: f32, palette: &[Lab8]) -> us
     static_assert!(core::mem::align_of::<Lab8>() == core::mem::align_of::<[__m256; 3]>());
 
     // SAFETY: static assertions above prove safety.
-    let palette = palette.as_ref();
     let chunks: &[[__m256; 3]] =
         core::slice::from_raw_parts(palette.as_ptr() as *const [__m256; 3], palette.len());
 

@@ -1,40 +1,25 @@
-#![allow(unused)]
+#![allow(unused, non_snake_case)]
 extern crate std;
 extern crate test;
 use std::vec::Vec;
 use test::black_box;
 
-#[bench]
-fn rgb_to_ansi_uncached_single(b: &mut test::Bencher) {
-    let mut i = 0;
-    b.iter(|| {
-        let (r, g, b) = COMMON[i];
-        i = (i + 1) % COMMON.len();
-        let n = crate::uncached::nearest_ansi256(r, g, b);
-        black_box(n);
-    });
+fn populate_cache256() {
+    for &(r, g, b) in &COMMON {
+        black_box(crate::nearest_ansi256(r, g, b));
+    }
+}
+
+#[cfg(feature = "88color")]
+fn populate_cache88() {
+    for &(r, g, b) in &COMMON {
+        black_box(crate::nearest_ansi256(r, g, b));
+    }
 }
 
 #[bench]
-fn rgb_to_ansi_uncached_many(b: &mut test::Bencher) {
-    b.iter(|| {
-        for &(r, g, b) in &COMMON[..256] {
-            black_box(crate::nearest_ansi256(r, g, b));
-        }
-    });
-}
-
-#[bench]
-fn rgb_to_ansi_many(b: &mut test::Bencher) {
-    b.iter(|| {
-        for &(r, g, b) in &COMMON[..256] {
-            black_box(crate::nearest_ansi256(r, g, b));
-        }
-    });
-}
-
-#[bench]
-fn rgb_to_ansi_single(b: &mut test::Bencher) {
+fn lookup_single_256_ours(b: &mut test::Bencher) {
+    populate_cache256();
     let mut i = 0;
     b.iter(|| {
         let (r, g, b) = COMMON[i];
@@ -46,10 +31,11 @@ fn rgb_to_ansi_single(b: &mut test::Bencher) {
 
 #[bench]
 #[cfg(feature = "88color")]
-fn rgb_to_ansi_88color_single(b: &mut test::Bencher) {
+fn lookup_single_88_ours(b: &mut test::Bencher) {
+    populate_cache88();
     let mut i = 0;
     b.iter(|| {
-        let (r, g, b) = COMMON[i];
+        let (r, g, b) = black_box(COMMON[i]);
         i = (i + 1) % COMMON.len();
         let n = crate::nearest_ansi88(r, g, b);
         black_box(n);
@@ -57,8 +43,40 @@ fn rgb_to_ansi_88color_single(b: &mut test::Bencher) {
 }
 
 #[bench]
+fn lookup_many_256_ours(b: &mut test::Bencher) {
+    populate_cache256();
+    b.iter(|| {
+        for &(r, g, b) in &black_box(&COMMON)[..256] {
+            black_box(crate::nearest_ansi256(r, g, b));
+        }
+    });
+}
+
+#[bench]
 #[cfg(feature = "88color")]
-fn rgb_to_ansi88_uncached_default(b: &mut test::Bencher) {
+fn lookup_many_88_ours(b: &mut test::Bencher) {
+    populate_cache88();
+    b.iter(|| {
+        for &(r, g, b) in &black_box(&COMMON)[..256] {
+            black_box(crate::nearest_ansi88(r, g, b));
+        }
+    });
+}
+
+#[bench]
+fn lookup_single_uncached_256(b: &mut test::Bencher) {
+    let mut i = 0;
+    b.iter(|| {
+        let (r, g, b) = black_box(COMMON[i]);
+        i = (i + 1) % COMMON.len();
+        let n = crate::uncached::nearest_ansi256(r, g, b);
+        black_box(n);
+    });
+}
+
+#[bench]
+#[cfg(feature = "88color")]
+fn lookup_single_uncached_88(b: &mut test::Bencher) {
     let mut i = 0;
     b.iter(|| {
         let (r, g, b) = black_box(COMMON[i]);
@@ -69,48 +87,66 @@ fn rgb_to_ansi88_uncached_default(b: &mut test::Bencher) {
 }
 
 #[bench]
-fn rgb_to_lab_ours_single(b: &mut test::Bencher) {
+fn lookup_many_uncached_256(b: &mut test::Bencher) {
+    b.iter(|| {
+        for &(r, g, b) in &black_box(&COMMON)[..256] {
+            black_box(crate::uncached::nearest_ansi256(r, g, b));
+        }
+    });
+}
+
+#[bench]
+#[cfg(feature = "88color")]
+fn lookup_many_uncached_88(b: &mut test::Bencher) {
+    b.iter(|| {
+        for &(r, g, b) in &black_box(&COMMON)[..256] {
+            black_box(crate::uncached::nearest_ansi88(r, g, b));
+        }
+    });
+}
+
+#[bench]
+fn srgb_to_oklab_single_ours(b: &mut test::Bencher) {
     let mut i = 0;
     b.iter(|| {
         let (r, g, b) = black_box(&COMMON)[i];
         i = (i + 1) % COMMON.len();
-        let n = rgb2lab(r, g, b);
+        let n = rgb2oklab(r, g, b);
         black_box(n);
     });
 }
 
 #[bench]
-fn rgb_to_lab_ours_many(b: &mut test::Bencher) {
+fn srgb_to_oklab_many_ours(b: &mut test::Bencher) {
     b.iter(|| {
         for &(r, g, b) in &black_box(&COMMON)[..256] {
-            black_box(rgb2lab(r, g, b));
+            black_box(rgb2oklab(r, g, b));
         }
     });
 }
 
 #[bench]
-#[cfg(any())]
-fn rgb_to_lab_labcrate_single(b: &mut test::Bencher) {
+fn srgb_to_oklab_single_theirs__oklab_crate(b: &mut test::Bencher) {
     let mut i = 0;
     b.iter(|| {
         let (r, g, b) = black_box(COMMON[i]);
         i = (i + 1) % COMMON.len();
-        black_box(Lab::from_srgb8(r, g, b));
+        black_box(oklab::srgb_to_oklab(oklab::RGB { r, g, b }));
     });
 }
 
 #[bench]
-#[cfg(any())]
-fn rgb_to_lab_labcrate_many(b: &mut test::Bencher) {
+fn srgb_to_oklab_many_theirs__oklab_crate(b: &mut test::Bencher) {
+    let mut i = 0;
     b.iter(|| {
         for &(r, g, b) in &black_box(&COMMON)[..256] {
-            black_box(Lab::from_srgb8(r, g, b));
+            black_box(oklab::srgb_to_oklab(oklab::RGB { r, g, b }));
         }
     });
 }
 
 #[bench]
-fn nearest256_single_with_lab_conv_fallback(b: &mut test::Bencher) {
+fn nearest_single_full_fallback_256(b: &mut test::Bencher) {
     let mut i = 0;
     b.iter(|| {
         let (r, g, b) = black_box(COMMON[i]);
@@ -121,11 +157,11 @@ fn nearest256_single_with_lab_conv_fallback(b: &mut test::Bencher) {
 }
 
 #[bench]
-fn nearest256_single_standalone_fallback(b: &mut test::Bencher) {
+fn nearest_single_searchonly_fallback_256(b: &mut test::Bencher) {
     let mut i = 0;
     let common_lab = COMMON
         .iter()
-        .map(|c| rgb2lab(c.0, c.1, c.2))
+        .map(|c| rgb2oklab(c.0, c.1, c.2))
         .collect::<Vec<_>>();
     b.iter(|| {
         let (l, a, b) = black_box(common_lab[i]);
@@ -136,10 +172,10 @@ fn nearest256_single_standalone_fallback(b: &mut test::Bencher) {
 }
 
 #[bench]
-fn nearest256_many_standalone_fallback(b: &mut test::Bencher) {
+fn nearest_many_searchonly_fallback_256(b: &mut test::Bencher) {
     let common_lab = COMMON
         .iter()
-        .map(|c| rgb2lab(c.0, c.1, c.2))
+        .map(|c| rgb2oklab(c.0, c.1, c.2))
         .collect::<Vec<_>>();
     b.iter(|| {
         for &(l, a, b) in &black_box(&common_lab)[..256] {
@@ -151,11 +187,11 @@ fn nearest256_many_standalone_fallback(b: &mut test::Bencher) {
 
 #[bench]
 #[cfg(feature = "88color")]
-fn nearest88_single_standalone_fallback(b: &mut test::Bencher) {
+fn nearest_single_searchonly_fallback_88(b: &mut test::Bencher) {
     let mut i = 0;
     let common_lab = COMMON
         .iter()
-        .map(|c| rgb2lab(c.0, c.1, c.2))
+        .map(|c| rgb2oklab(c.0, c.1, c.2))
         .collect::<Vec<_>>();
     b.iter(|| {
         let (l, a, b) = black_box(common_lab[i]);
@@ -167,10 +203,10 @@ fn nearest88_single_standalone_fallback(b: &mut test::Bencher) {
 
 #[bench]
 #[cfg(feature = "88color")]
-fn nearest88_many_standalone_fallback(b: &mut test::Bencher) {
+fn nearest_many_searchonly_fallback_88(b: &mut test::Bencher) {
     let common_lab = COMMON
         .iter()
-        .map(|c| rgb2lab(c.0, c.1, c.2))
+        .map(|c| rgb2oklab(c.0, c.1, c.2))
         .collect::<Vec<_>>();
     b.iter(|| {
         for &(l, a, b) in &black_box(&common_lab)[..256] {
@@ -181,11 +217,11 @@ fn nearest88_many_standalone_fallback(b: &mut test::Bencher) {
 }
 
 #[bench]
-#[cfg(any())]
-pub fn ansi_colours_single(b: &mut test::Bencher) {
+// #[cfg(any())]
+pub fn lookup_single_256_theirs__ansi_colours(b: &mut test::Bencher) {
     let mut i = 0;
     b.iter(|| {
-        let rgb = COMMON[i];
+        let rgb = black_box(COMMON[i]);
         i = (i + 1) % COMMON.len();
         let n = ansi_colours::ansi256_from_rgb(rgb);
         black_box(n);
@@ -193,21 +229,21 @@ pub fn ansi_colours_single(b: &mut test::Bencher) {
 }
 
 #[bench]
-#[cfg(any())]
-fn ansi_colours_many(b: &mut test::Bencher) {
+// #[cfg(any())]
+fn lookup_many_256_theirs__ansi_colours(b: &mut test::Bencher) {
     b.iter(|| {
-        for &(r, g, b) in &COMMON[..256] {
+        for &(r, g, b) in &black_box(&COMMON)[..256] {
             black_box(ansi_colours::ansi256_from_rgb((r, g, b)));
         }
     });
 }
 
-use crate::imp::lab::Lab;
+use crate::imp::oklab::OkLab as Lab;
 
 macro_rules! items { ($($i:item)*) => { $($i)* }; }
 
 #[inline]
-pub fn rgb2lab(r: u8, g: u8, b: u8) -> (f32, f32, f32) {
+pub fn rgb2oklab(r: u8, g: u8, b: u8) -> (f32, f32, f32) {
     let lab = Lab::from_srgb8(r, g, b);
     (lab.l, lab.a, lab.b)
 }
@@ -222,143 +258,174 @@ items! {
     #[allow(unused)]
     use crate::imp::simd_portable as stdsimd;
 
-    #[bench]
-    fn nearest256_single_with_lab_conv_f32x8(b: &mut test::Bencher) {
-        let mut i = 0;
-        b.iter(|| {
-            let (r, g, b) = black_box(COMMON[i]);
-            i = (i + 1) % COMMON.len();
-            unsafe {
-                let n = stdsimd::nearest_ansi256_f32x8(Lab::from_srgb8(r, g, b));
-                black_box(n);
-            }
-        });
-    }
+    // #[bench]
+    // fn nearest_single_full_f32x4_256(b: &mut test::Bencher) {
+    //     let mut i = 0;
+    //     b.iter(|| {
+    //         let (r, g, b) = black_box(COMMON[i]);
+    //         i = (i + 1) % COMMON.len();
+    //         let n = stdsimd::nearest_ansi256_f32x4(Lab::from_srgb8(r, g, b));
+    //         black_box(n);
+    //     });
+    // }
 
-    #[bench]
-    fn nearest256_single_with_lab_conv_f32x4(b: &mut test::Bencher) {
-        let mut i = 0;
-        b.iter(|| {
-            let (r, g, b) = black_box(COMMON[i]);
-            i = (i + 1) % COMMON.len();
-            let n = stdsimd::nearest_ansi256_f32x4(Lab::from_srgb8(r, g, b));
-            black_box(n);
-        });
-    }
+    // #[bench]
+    // #[cfg(feature = "88color")]
+    // fn nearest_single_full_stdsimd_f32x4_88(b: &mut test::Bencher) {
+    //     let mut i = 0;
+    //     b.iter(|| {
+    //         let (r, g, b) = black_box(COMMON[i]);
+    //         i = (i + 1) % COMMON.len();
+    //         unsafe {
+    //             let n = stdsimd::nearest_ansi88_f32x4(Lab::from_srgb8(r, g, b));
+    //             black_box(n);
+    //         }
+    //     });
+    // }
 
-    #[bench]
-    #[cfg(feature = "88color")]
-    fn nearest88_single_with_lab_conv_f32x8(b: &mut test::Bencher) {
-        let mut i = 0;
-        b.iter(|| {
-            let (r, g, b) = black_box(COMMON[i]);
-            i = (i + 1) % COMMON.len();
-            unsafe {
-                let n = stdsimd::nearest_ansi88_f32x8(Lab::from_srgb8(r, g, b));
-                black_box(n);
-            }
-        });
-    }
-
-    #[bench]
-    #[cfg(feature = "88color")]
-    fn nearest88_single_with_lab_conv_f32x4(b: &mut test::Bencher) {
-        let mut i = 0;
-        b.iter(|| {
-            let (r, g, b) = black_box(COMMON[i]);
-            i = (i + 1) % COMMON.len();
-            let n = stdsimd::nearest_ansi88_f32x4(Lab::from_srgb8(r, g, b));
-            black_box(n);
-        });
-    }
+    // #[bench]
+    // #[cfg(feature = "88color")]
+    // fn nearest_single_full_stdsimd_f32x4_88(b: &mut test::Bencher) {
+    //     let mut i = 0;
+    //     b.iter(|| {
+    //         let (r, g, b) = black_box(COMMON[i]);
+    //         i = (i + 1) % COMMON.len();
+    //         let n = stdsimd::nearest_ansi88_f32x4(Lab::from_srgb8(r, g, b));
+    //         black_box(n);
+    //     });
+    // }
 
 
+    // #[bench]
+    // fn nearest_single_searchonly_stdsimd_f32x4_256(b: &mut test::Bencher) {
+    //     let mut i = 0;
+    //     let common_lab = COMMON
+    //         .iter()
+    //         .map(|c| rgb2oklab(c.0, c.1, c.2))
+    //         .collect::<Vec<_>>();
+    //     b.iter(|| {
+    //         let (l, a, b) = black_box(common_lab[i]);
+    //         i = (i + 1) % common_lab.len();
+    //         let n = stdsimd::nearest_ansi256_f32x4(Lab { l, a, b });
+    //         black_box(n);
+    //     });
+    // }
+
+    // #[bench]
+    // fn nearest_many_searchonly_stdsimd_f32x4_256(b: &mut test::Bencher) {
+    //     let common_lab = COMMON
+    //         .iter()
+    //         .map(|c| rgb2oklab(c.0, c.1, c.2))
+    //         .collect::<Vec<_>>();
+    //     b.iter(|| {
+    //         for &(l, a, b) in &black_box(&common_lab)[..256] {
+    //             let n = stdsimd::nearest_ansi256_f32x4(Lab { l, a, b });
+    //             black_box(n);
+    //         }
+    //     });
+    // }
+
     #[bench]
-    fn nearest256_single_standalone_f32x4(b: &mut test::Bencher) {
+    fn nearest_single_searchonly_stdsimd_256(b: &mut test::Bencher) {
         let mut i = 0;
         let common_lab = COMMON
             .iter()
-            .map(|c| rgb2lab(c.0, c.1, c.2))
+            .map(|c| rgb2oklab(c.0, c.1, c.2))
             .collect::<Vec<_>>();
         b.iter(|| {
             let (l, a, b) = black_box(common_lab[i]);
             i = (i + 1) % common_lab.len();
-            let n = stdsimd::nearest_ansi256_f32x4(Lab { l, a, b });
+            let n = stdsimd::nearest_ansi256(Lab { l, a, b });
             black_box(n);
         });
     }
+
     #[bench]
-    fn nearest256_single_standalone_f32x8(b: &mut test::Bencher) {
+    fn nearest_many_searchonly_stdsimd_256(b: &mut test::Bencher) {
+        let common_lab = COMMON
+            .iter()
+            .map(|c| rgb2oklab(c.0, c.1, c.2))
+            .collect::<Vec<_>>();
+        b.iter(|| {
+            for &(l, a, b) in &black_box(&common_lab)[..256] {
+                let n = stdsimd::nearest_ansi256(Lab { l, a, b });
+                black_box(n);
+            }
+        });
+    }
+
+
+    #[bench]
+    #[cfg(feature = "88color")]
+    fn nearest_single_searchonly_stdsimd_88(b: &mut test::Bencher) {
         let mut i = 0;
         let common_lab = COMMON
             .iter()
-            .map(|c| rgb2lab(c.0, c.1, c.2))
+            .map(|c| rgb2oklab(c.0, c.1, c.2))
             .collect::<Vec<_>>();
         b.iter(|| {
             let (l, a, b) = black_box(common_lab[i]);
             i = (i + 1) % common_lab.len();
-            let n = stdsimd::nearest_ansi256_f32x8(Lab { l, a, b });
+            let n = stdsimd::nearest_ansi88(Lab { l, a, b });
             black_box(n);
         });
     }
 
     #[bench]
-    fn nearest256_many_standalone_f32x4(b: &mut test::Bencher) {
-        let common_lab = COMMON
-            .iter()
-            .map(|c| rgb2lab(c.0, c.1, c.2))
-            .collect::<Vec<_>>();
-        b.iter(|| {
-            for &(l, a, b) in &black_box(&common_lab)[..256] {
-                let n = stdsimd::nearest_ansi256_f32x4(Lab { l, a, b });
-                black_box(n);
-            }
-        });
-    }
-
-    #[bench]
-    fn nearest256_many_standalone_f32x8(b: &mut test::Bencher) {
-        let common_lab = COMMON
-            .iter()
-            .map(|c| rgb2lab(c.0, c.1, c.2))
-            .collect::<Vec<_>>();
-        b.iter(|| {
-            for &(l, a, b) in &black_box(&common_lab)[..256] {
-                let n = stdsimd::nearest_ansi256_f32x8(Lab { l, a, b });
-                black_box(n);
-            }
-        });
-    }
-
-    #[bench]
     #[cfg(feature = "88color")]
-    fn nearest88_many_standalone_f32x4(b: &mut test::Bencher) {
+    fn nearest_many_searchonly_stdsimd_88(b: &mut test::Bencher) {
         let common_lab = COMMON
             .iter()
-            .map(|c| rgb2lab(c.0, c.1, c.2))
+            .map(|c| rgb2oklab(c.0, c.1, c.2))
             .collect::<Vec<_>>();
         b.iter(|| {
             for &(l, a, b) in &black_box(&common_lab)[..256] {
-                let n = stdsimd::nearest_ansi88_f32x4(Lab { l, a, b });
+                let n = stdsimd::nearest_ansi88(Lab { l, a, b });
                 black_box(n);
             }
         });
     }
+    // #[bench]
+    // #[cfg(feature = "88color")]
+    // fn nearest_many_searchonly_f32x4_88(b: &mut test::Bencher) {
+    //     let common_lab = COMMON
+    //         .iter()
+    //         .map(|c| rgb2oklab(c.0, c.1, c.2))
+    //         .collect::<Vec<_>>();
+    //     b.iter(|| {
+    //         for &(l, a, b) in &black_box(&common_lab)[..256] {
+    //             let n = stdsimd::nearest_ansi88_f32x4(Lab { l, a, b });
+    //             black_box(n);
+    //         }
+    //     });
+    // }
 
-    #[bench]
-    #[cfg(feature = "88color")]
-    fn nearest88_many_standalone_f32x8(b: &mut test::Bencher) {
-        let common_lab = COMMON
-            .iter()
-            .map(|c| rgb2lab(c.0, c.1, c.2))
-            .collect::<Vec<_>>();
-        b.iter(|| {
-            for &(l, a, b) in &black_box(&common_lab)[..256] {
-                let n = stdsimd::nearest_ansi88_f32x8(Lab { l, a, b });
-                black_box(n);
-            }
-        });
-    }
+    // #[bench]
+    // fn nearest_single_full_stdsimd_256(b: &mut test::Bencher) {
+    //     let mut i = 0;
+    //     b.iter(|| {
+    //         let (r, g, b) = black_box(COMMON[i]);
+    //         i = (i + 1) % COMMON.len();
+    //         unsafe {
+    //             let n = stdsimd::nearest_ansi256(Lab::from_srgb8(r, g, b));
+    //             black_box(n);
+    //         }
+    //     });
+    // }
+    // #[bench]
+    // #[cfg(feature = "88color")]
+    // fn nearest_many_searchonly_88(b: &mut test::Bencher) {
+    //     let common_lab = COMMON
+    //         .iter()
+    //         .map(|c| rgb2oklab(c.0, c.1, c.2))
+    //         .collect::<Vec<_>>();
+    //     b.iter(|| {
+    //         for &(l, a, b) in &black_box(&common_lab)[..256] {
+    //             let n = stdsimd::nearest_ansi88(Lab { l, a, b });
+    //             black_box(n);
+    //         }
+    //     });
+    // }
 }
 
 #[cfg(all(
@@ -372,7 +439,7 @@ items! {
 
     #[bench]
     #[cfg(feature = "simd-avx")]
-    fn nearest256_single_with_lab_conv_avx(b: &mut test::Bencher) {
+    fn nearest_single_full_avx_256(b: &mut test::Bencher) {
         assert!(core_detect::is_x86_feature_detected!("avx"));
         let mut i = 0;
         b.iter(|| {
@@ -388,7 +455,7 @@ items! {
     #[bench]
     #[cfg(feature = "88color")]
     #[cfg(feature = "simd-avx")]
-    fn nearest88_single_with_lab_conv_avx(b: &mut test::Bencher) {
+    fn nearest_single_full_avx_88(b: &mut test::Bencher) {
         assert!(core_detect::is_x86_feature_detected!("avx"));
         let mut i = 0;
         b.iter(|| {
@@ -403,12 +470,12 @@ items! {
 
     #[bench]
     #[cfg(feature = "simd-avx")]
-    fn nearest256_single_standalone_avx(b: &mut test::Bencher) {
+    fn nearest_single_searchonly_avx_256(b: &mut test::Bencher) {
         assert!(core_detect::is_x86_feature_detected!("avx"));
         let mut i = 0;
         let common_lab = COMMON
             .iter()
-            .map(|c| rgb2lab(c.0, c.1, c.2))
+            .map(|c| rgb2oklab(c.0, c.1, c.2))
             .collect::<Vec<_>>();
         b.iter(|| {
             let (l, a, b) = black_box(common_lab[i]);
@@ -421,7 +488,7 @@ items! {
     }
 
     #[bench]
-    fn nearest256_single_with_lab_conv_sse2(b: &mut test::Bencher) {
+    fn nearest_single_full_sse2_256(b: &mut test::Bencher) {
         let mut i = 0;
         b.iter(|| {
             let (r, g, b) = black_box(COMMON[i]);
@@ -433,7 +500,7 @@ items! {
 
     #[bench]
     #[cfg(feature = "88color")]
-    fn nearest88_single_with_lab_conv_sse2(b: &mut test::Bencher) {
+    fn nearest_single_full_sse2_88(b: &mut test::Bencher) {
         let mut i = 0;
         b.iter(|| {
             let (r, g, b) = black_box(COMMON[i]);
@@ -444,11 +511,11 @@ items! {
     }
 
     #[bench]
-    fn nearest256_single_standalone_sse2(b: &mut test::Bencher) {
+    fn nearest_single_searchonly_sse2_256(b: &mut test::Bencher) {
         let mut i = 0;
         let common_lab = COMMON
             .iter()
-            .map(|c| rgb2lab(c.0, c.1, c.2))
+            .map(|c| rgb2oklab(c.0, c.1, c.2))
             .collect::<Vec<_>>();
         b.iter(|| {
             let (l, a, b) = black_box(common_lab[i]);
@@ -459,10 +526,10 @@ items! {
     }
 
     #[bench]
-    fn nearest256_many_standalone_sse2(b: &mut test::Bencher) {
+    fn nearest_many_searchonly_sse2_256(b: &mut test::Bencher) {
         let common_lab = COMMON
             .iter()
-            .map(|c| rgb2lab(c.0, c.1, c.2))
+            .map(|c| rgb2oklab(c.0, c.1, c.2))
             .collect::<Vec<_>>();
         b.iter(|| {
             for &(l, a, b) in &black_box(&common_lab)[..256] {
@@ -474,10 +541,10 @@ items! {
 
     #[bench]
     #[cfg(feature = "88color")]
-    fn nearest88_many_standalone_sse2(b: &mut test::Bencher) {
+    fn nearest_many_searchonly_sse2_88(b: &mut test::Bencher) {
         let common_lab = COMMON
             .iter()
-            .map(|c| rgb2lab(c.0, c.1, c.2))
+            .map(|c| rgb2oklab(c.0, c.1, c.2))
             .collect::<Vec<_>>();
         b.iter(|| {
             for &(l, a, b) in &black_box(&common_lab)[..256] {
@@ -489,11 +556,11 @@ items! {
 
     #[bench]
     #[cfg(feature = "simd-avx")]
-    fn nearest256_many_standalone_avx(b: &mut test::Bencher) {
+    fn nearest_many_searchonly_avx_256(b: &mut test::Bencher) {
         assert!(core_detect::is_x86_feature_detected!("avx"));
         let common_lab = COMMON
             .iter()
-            .map(|c| rgb2lab(c.0, c.1, c.2))
+            .map(|c| rgb2oklab(c.0, c.1, c.2))
             .collect::<Vec<_>>();
         b.iter(|| {
             for &(l, a, b) in &black_box(&common_lab)[..256] {
@@ -506,11 +573,11 @@ items! {
     #[bench]
     #[cfg(feature = "simd-avx")]
     #[cfg(feature = "88color")]
-    fn nearest88_many_standalone_avx(b: &mut test::Bencher) {
+    fn nearest_many_searchonly_avx_88(b: &mut test::Bencher) {
         assert!(core_detect::is_x86_feature_detected!("avx"));
         let common_lab = COMMON
             .iter()
-            .map(|c| rgb2lab(c.0, c.1, c.2))
+            .map(|c| rgb2oklab(c.0, c.1, c.2))
             .collect::<Vec<_>>();
         b.iter(|| {
             for &(l, a, b) in &black_box(&common_lab)[..256] {
@@ -531,7 +598,7 @@ items! {
     use crate::imp::simd_neon;
 
     #[bench]
-    fn nearest256_single_with_lab_conv_neon(b: &mut test::Bencher) {
+    fn nearest_single_full_neon_256(b: &mut test::Bencher) {
         let mut i = 0;
         b.iter(|| {
             let (r, g, b) = black_box(COMMON[i]);
@@ -543,7 +610,7 @@ items! {
 
     #[bench]
     #[cfg(feature = "88color")]
-    fn nearest88_single_with_lab_conv_neon(b: &mut test::Bencher) {
+    fn nearest_single_full_neon_88(b: &mut test::Bencher) {
         let mut i = 0;
         b.iter(|| {
             let (r, g, b) = black_box(COMMON[i]);
@@ -554,11 +621,11 @@ items! {
     }
 
     #[bench]
-    fn nearest256_single_standalone_neon(b: &mut test::Bencher) {
+    fn nearest_single_searchonly_neon_256(b: &mut test::Bencher) {
         let mut i = 0;
         let common_lab = COMMON
             .iter()
-            .map(|c| rgb2lab(c.0, c.1, c.2))
+            .map(|c| rgb2oklab(c.0, c.1, c.2))
             .collect::<Vec<_>>();
         b.iter(|| {
             let (l, a, b) = black_box(common_lab[i]);
@@ -569,10 +636,10 @@ items! {
     }
 
     #[bench]
-    fn nearest256_many_standalone_neon(b: &mut test::Bencher) {
+    fn nearest_many_searchonly_neon_256(b: &mut test::Bencher) {
         let common_lab = COMMON
             .iter()
-            .map(|c| rgb2lab(c.0, c.1, c.2))
+            .map(|c| rgb2oklab(c.0, c.1, c.2))
             .collect::<Vec<_>>();
         b.iter(|| {
             for &(l, a, b) in &black_box(&common_lab)[..256] {
@@ -584,10 +651,10 @@ items! {
 
     #[bench]
     #[cfg(feature = "88color")]
-    fn nearest88_many_standalone_neon(b: &mut test::Bencher) {
+    fn nearest_many_searchonly_neon_88(b: &mut test::Bencher) {
         let common_lab = COMMON
             .iter()
-            .map(|c| rgb2lab(c.0, c.1, c.2))
+            .map(|c| rgb2oklab(c.0, c.1, c.2))
             .collect::<Vec<_>>();
         b.iter(|| {
             for &(l, a, b) in &black_box(&common_lab)[..256] {

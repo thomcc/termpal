@@ -1,8 +1,52 @@
-# `rgb-to-ansi`
+# `termpal`
 
-Convert a 24bit "truecolor" RGB tuple into the nearest color available in the palette of 256 color or 88 color terminals, things like `rxvt-256color` or `xterm-88color`.
+Convert from a 24-bit RGB color to the nearest color supported by a terminal that only supports 256 colors, 88 colors terminals -- things like `xterm-256color`, `rxvt-88color`, and similar.
 
-The distance metric used is a *highly* optimized implementation of CIELAB ΔE\*<sub>ab</sub> 1976 color distance metric (also known as CIE76). This isn't a perfect metric, and has been superceded by subsequent versions, but allows for a much more efficient implementation — see the optimizations section below for some discussion on how we make it fast.
+This crate is very focused. It does not handle detecting the colors supported by a given terminal, nor does it handle the actual styling of text.
+
+It does this 
+
+It uses a highly optimized variant of the CIELAB ΔE\*<sub>ab</sub> 1976 (CIE76) color distance metric, which uses the [Oklab](https://bottosson.github.io/posts/oklab) color space to perform the distance calculation instead of LAB. This departure from CIE76 was done because it happened to produce more accurate[^1] results, at least in this case (it may not generalize).
+
+[^1]: Accuracy here is measured as error (L1/L2 norm) versus the "correct"
+    nearest color, as given by CIEDE2000. CIEDE is the current best perceptual
+    color distance metric, but is sadly quite difficult to compute efficiently
+    enough for this use case.
+
+## Optimizations
+
+
+
+1. First, we check if the query is in the cache. The cache is a custom lock-free
+   and wait-free concurrent cache-table, designed specifically for this purpose.
+
+    This cache-table is designed to have low contention, and as such it requires
+    no atomic read-modify-write or fence operations -- only relaxed loads and
+    stores are needed for correctness (this is easier than it sounds, because
+    the 24 bit key and 8 bit result can be encoded in a single 32 bit value).
+
+2. If the query is not in the cache, then we must convert the sRGB color to
+   OkLAB, and then perform the sa
+
+ on x86 we use SIMD-accelerated
+
+The only un
+
+
+This crate does not contain code to detect the colors supported by a terminal (see something like [`supports-color`](https://crates.io/crates/supports-color)), nor does it contain code to convert from the .
+
+
+
+
+The distance metric used to compare color distances is a *highly* optimized variant of the CIELAB ΔE\*<sub>ab</sub> 1976 (CIE76) color distance metric, where the computation is performed in [OkLAB](https://bottosson.github.io/posts/oklab) space rather than LAB space. While this is slightly unconventional, it provided a lower error (as determined by L1 and L2 norm, using CIEDE2000 as reference) than "plain" CIE76 was able to give.
+
+
+
+This metric is used because it was the best perceptual metric I was able to find, that was still possible to implement efficiently.
+
+While CIE76 is no longer recommended for most uses, it's still significantly better than what you
+
+This isn't a perfect metric, and has been superceded by subsequent versions, but allows for a much more efficient implementation — see the optimizations section below for some discussion on how we make it fast.
 
 Note: Detecting the current terminal's color support is considered out of scope, as is the task of formatting and emitting escape sequences. The other crates in this repository can help you with that task, if you need.
 

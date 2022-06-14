@@ -13,19 +13,42 @@ default = ["simd"]
 # Use a SIMD-accelerated implementation, if available. On by default.
 simd = []
 
-# Use AVX instructions for the SIMD implementation if we can detect at compile
-# time that they're available. This is off by default, because AVX instructions
-# are a bit of a mixed bag. Until https://github.com/rust-lang/stdarch/pull/1155
-# stabilizes, the AVX isn't even faster than the SSE2 version either...
+# When on x86 and/or x86_64 processor, use AVX instructions for the SIMD
+# implementation if we can detect at compile time that they're available. This
+# is off by default, because AVX instructions are a bit of a mixed bag. Until
+# https://github.com/rust-lang/stdarch/pull/1155 stabilizes, the AVX isn't even
+# faster than the SSE2 version either...
 simd-avx = ["simd"]
 
 # Use AVX instructions for the SIMD implementation if we can detect at runtime
 # (using `core_detect`) that they're available.
 simd-runtime-avx = ["simd-avx", "core_detect"]
 
-# __internals_for_benchmarking = ["simd-avx", "88color"]
+# Works as of 2022-06-10, but 1.5x-2x as slow as intrinsics, and just generally
+# not worth maintaining IMO.
+#
 unstable-portable-simd = ["simd"]
 
 [dependencies]
 core_detect = { version = "1", optional = true }
 cfg-if = "1"
+
+[dev-dependencies]
+ansi_colours = "1.1.1"
+oklab = "1"
+
+[profile.bench]
+debug-assertions = false
+overflow-checks = false
+opt-level = 3
+lto = true
+codegen-units = 1
+
+[profile.test]
+debug-assertions = true
+overflow-checks = true
+opt-level = 2
+
+
+# [workspace]
+# members = [".", "xtask"]

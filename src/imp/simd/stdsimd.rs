@@ -1,4 +1,12 @@
-use crate::imp::{lab::*, tab};
+//! This is unused code for now, although when `core::simd` stabilizes it may be
+//! revisited (probably only on platforms I don't care about enough to write an
+//! intrinsic-using impl...). Currently the moment, it's was between 1.5x and 2x
+//! slower than the versions that use intrinsics directly. This is a bummer, and
+//! is not enough to justify the maintenance cost.
+//!
+//! Written against `rustc 1.63.0-nightly (ec55c6130 2022-06-10)`'s version of
+//! `core::simd`.
+use crate::imp::{oklab::*, tab};
 use core::simd::*;
 
 static_assert!(core::mem::size_of::<SimdRow>() == core::mem::size_of::<f32x4>() * 2);
@@ -6,13 +14,13 @@ static_assert!(core::mem::align_of::<SimdRow>() >= core::mem::align_of::<[f32x4;
 static_assert!(core::mem::size_of::<SimdRow>() == core::mem::size_of::<f32x8>());
 static_assert!(core::mem::align_of::<SimdRow>() >= core::mem::align_of::<f32x8>());
 
+#[cfg(any())]
 fn nearest_f32x4(l: f32, a: f32, b: f32, palette: &[Lab8]) -> usize {
     // static assertions to check that a 3-wide array of 4-wide f32 vector must
     // have same size and align as lab4
     static_assert!(core::mem::size_of::<Lab8>() == core::mem::size_of::<[[f32x4; 2]; 3]>());
     static_assert!(core::mem::align_of::<Lab8>() >= core::mem::align_of::<[[f32x4; 2]; 3]>());
 
-    let palette = palette.as_ref();
     // SAFETY: static assertions above prove safety.
     let chunks: &[[[f32x4; 2]; 3]] = unsafe {
         core::slice::from_raw_parts(palette.as_ptr() as *const [[f32x4; 2]; 3], palette.len())
@@ -35,6 +43,9 @@ fn nearest_f32x4(l: f32, a: f32, b: f32, palette: &[Lab8]) -> usize {
     let col_lx4 = f32x4::splat(l);
     let col_ax4 = f32x4::splat(a);
     let col_bx4 = f32x4::splat(b);
+    let mut cur_index: u32x8 = u32x8::from_array([0, 1, 2, 3, 4, 5, 6, 7]);
+    let mut best_idxs: u32x8 = u32x8::splat(u32::MAX);
+    let mut mins = f32x8::splat(f32::INFINITY);
 
     for (i, chunk) in chunks.iter().enumerate() {
         // chunk contains 8 Lab colors. compute the distance between `col` and
@@ -108,35 +119,48 @@ fn nearest_f32x4(l: f32, a: f32, b: f32, palette: &[Lab8]) -> usize {
     best_chunk + (MASK_TO_FIRST_INDEX[mask as usize] as usize) + 16
 }
 
-fn nearest_f32x8(l: f32, a: f32, b: f32, palette: &[Lab8]) -> usize {
+#[cfg_attr(
+    all(
+        feature = "simd-runtime-avx",
+        any(target_arch = "x86", target_arch = "x86_64"),
+    ),
+    inline(always)
+)]
+fn nearest_f32x8_imp(l: f32, a: f32, b: f32, palette: &[Lab8]) -> usize {
     // static assertions to check that a 3-wide array of 4-wide f32 vector must
     // have same size and align as lab4
     static_assert!(core::mem::size_of::<Lab8>() == core::mem::size_of::<[f32x8; 3]>());
     static_assert!(core::mem::align_of::<Lab8>() == core::mem::align_of::<[f32x8; 3]>());
 
     // SAFETY: static assertions above prove safety.
-    let palette = palette.as_ref();
     let chunks: &[[f32x8; 3]] = unsafe {
         core::slice::from_raw_parts(palette.as_ptr() as *const [f32x8; 3], palette.len())
     };
 
     debug_assert!(!palette.is_empty());
-    // index of best chunk so far
-    let mut best_chunk: usize = 0;
+    // // index of best chunk so far
+    // let mut best_chunk: usize = 0;
 
-    // closest (squared) distance repated 4x in a row
-    let mut best = f32x8::splat(f32::MAX);
+    // // closest (squared) distance repated 4x in a row
+    // let mut best = f32x8::splat(f32::MAX);
 
-    // `dists` for the entries of best_chunk. we compare with `best` to
-    // figure out the index in `best_chunk`.
-    let mut best_dists = f32x8::splat(f32::MAX);
+    // // `dists` for the entries of best_chunk. we compare with `best` to
+    // // figure out the index in `best_chunk`.
+    // let mut best_dists = f32x8::splat(f32::MAX);
 
     // splat each entry e.g. `col_lx8` is `[l, l, l, l]`.
     let col_lx8 = f32x8::splat(l);
     let col_ax8 = f32x8::splat(a);
     let col_bx8 = f32x8::splat(b);
 
-    for (i, chunk) in chunks.iter().enumerate() {
+    // TODO: prob a better way to do crate these.
+    let mut cur_index: u32x8 = u32x8::from_array([0, 1, 2, 3, 4, 5, 6, 7]);
+
+    let mut best_idxs: u32x8 = u32x8::splat(u32::MAX);
+
+    let mut mins = f32x8::splat(f32::INFINITY);
+
+    for chunk in chunks.iter() {
         // chunk contains 8 Lab colors. compute the distance between `col` and
         // all 8 colors at once using the sum of squared distances.
 
@@ -160,57 +184,92 @@ fn nearest_f32x8(l: f32, a: f32, b: f32, palette: &[Lab8]) -> usize {
         // sum them to get the squared distances
         let dists = dldl + dada + dbdb;
 
-        // see if any entry is closer than our current best
-        let ltmask = dists.lanes_lt(best);
+        let mask = dists.lanes_lt(mins);
+        mins = mask.select(dists, mins);
+        best_idxs = mask.select(cur_index, best_idxs);
 
-        if ltmask.any() {
-            // Just mark the start index and both chunks. sort it out later.
-            best_chunk = i * 8;
-            best_dists = dists;
-
-            // expand the new min distance to all 8 lanes of `best`.
-            best = f32x8::splat(best.min(dists).reduce_min());
-        }
+        cur_index += u32x8::splat(8);
     }
-    // TODO: this is dumb
-    // We need to see which index `best` is in `best4` to see how much we
-    // should add to `best_start` to return.
-    //
-    // Compute the mask, and then use that mask to index into a lookup table
-    // that says which value to use.
-    let mask = best.lanes_eq(best_dists);
-    debug_assert!(mask.any());
-    best_chunk + (mask.to_bitmask().trailing_zeros() as usize) + 16
-    // Note: `best_chunk + 16 + mask.trailing_zeroes() as usize` is
-    // basically the same (but IIRC slower)
-    // best_chunk + (MASK_TO_FIRST_INDEX[mask as usize] as usize)
+
+    let half1 = core::simd::simd_swizzle!(mins, [0, 1, 2, 3]);
+    let half2 = core::simd::simd_swizzle!(mins, [4, 5, 6, 7]);
+    let halfmask = half1.lanes_lt(half2);
+
+    let mins = halfmask.select(half1, half2);
+    let best_idxs = halfmask.select(
+        core::simd::simd_swizzle!(best_idxs, [0, 1, 2, 3]),
+        core::simd::simd_swizzle!(best_idxs, [4, 5, 6, 7]),
+    );
+
+    let half1 = core::simd::simd_swizzle!(mins, [0, 1]);
+    let half2 = core::simd::simd_swizzle!(mins, [2, 3]);
+    let halfmask = half1.lanes_lt(half2);
+
+    let mins = halfmask.select(half1, half2);
+    let best_idxs = halfmask.select(
+        core::simd::simd_swizzle!(best_idxs, [0, 1]),
+        core::simd::simd_swizzle!(best_idxs, [2, 3]),
+    );
+
+    let res = if mins[0] < mins[1] {
+        best_idxs[0]
+    } else {
+        best_idxs[1]
+    };
+    debug_assert_ne!(res, u32::MAX);
+    res as usize + 16
 }
+
+#[cfg(not(all(
+    feature = "simd-runtime-avx",
+    any(target_arch = "x86", target_arch = "x86_64"),
+),))]
+use nearest_f32x8_imp as nearest_f32x8;
+
+#[cfg(all(
+    feature = "simd-runtime-avx",
+    any(target_arch = "x86", target_arch = "x86_64"),
+))]
+fn nearest_f32x8(l: f32, a: f32, b: f32, palette: &[Lab8]) -> usize {
+    #[target_feature(enable = "avx")]
+    unsafe fn nearest_f32x8_avx(l: f32, a: f32, b: f32, palette: &[Lab8]) -> usize {
+        nearest_f32x8_imp(l, a, b, palette)
+    }
+
+    fn nearest_f32x8_noavx(l: f32, a: f32, b: f32, palette: &[Lab8]) -> usize {
+        nearest_f32x8_imp(l, a, b, palette)
+    }
+    if core_detect::is_x86_feature_detected!("avx") {
+        unsafe { nearest_f32x8_avx(l, a, b, palette) }
+    } else {
+        nearest_f32x8_noavx(l, a, b, palette)
+    }
+}
+
+// #[inline]
+// #[cfg(feature = "88color")]
+// pub(crate) fn nearest_ansi88_f32x4(l: OkLab) -> u8 {
+//     let r = nearest_f32x4(l.l, l.a, l.b, &tab::LAB_ROWS_ANSI88);
+//     debug_assert!(r < 88, "{}", r);
+//     r as u8
+// }
+
+// #[inline]
+// pub(crate) fn nearest_ansi256_f32x4(l: OkLab) -> u8 {
+//     let r = nearest_f32x4(l.l, l.a, l.b, &tab::LAB_ROWS_ANSI256);
+//     debug_assert!(r < 256, "{}", r);
+//     r as u8
+// }
 
 // #[inline]
 #[cfg(feature = "88color")]
-pub(crate) fn nearest_ansi88_f32x4(l: Lab) -> u8 {
-    let r = nearest_f32x4(l.l, l.a, l.b, &tab::LAB_ROWS_ANSI88);
-    debug_assert!(r < 88, "{}", r);
-    r as u8
-}
-
-// #[inline]
-pub(crate) fn nearest_ansi256_f32x4(l: Lab) -> u8 {
-    let r = nearest_f32x4(l.l, l.a, l.b, &tab::LAB_ROWS_ANSI256);
-    debug_assert!(r < 256, "{}", r);
-    r as u8
-}
-
-// #[inline]
-#[cfg(feature = "88color")]
-pub(crate) fn nearest_ansi88_f32x8(l: Lab) -> u8 {
+pub(crate) fn nearest_ansi88(l: OkLab) -> u8 {
     let r = nearest_f32x8(l.l, l.a, l.b, &tab::LAB_ROWS_ANSI88);
     debug_assert!(r < 88, "{}", r);
     r as u8
 }
-
 // #[inline]
-pub(crate) fn nearest_ansi256_f32x8(l: Lab) -> u8 {
+pub(crate) fn nearest_ansi256(l: OkLab) -> u8 {
     let r = nearest_f32x8(l.l, l.a, l.b, &tab::LAB_ROWS_ANSI256);
     debug_assert!(r < 256, "{}", r);
     r as u8
@@ -226,17 +285,17 @@ mod test {
         for r in 0..=255 {
             for g in 0..=255 {
                 for b in 0..=255 {
-                    let lab = Lab::from_srgb8(r, g, b);
+                    let lab = OkLab::from_srgb8(r, g, b);
                     let scalar256 = crate::imp::fallback::nearest_ansi256(lab);
+                    // assert_eq!(
+                    //     super::nearest_ansi256_f32x4(lab),
+                    //     scalar256,
+                    //     "256color[x4] {:?} -> {:?}",
+                    //     (r, g, b),
+                    //     lab,
+                    // );
                     assert_eq!(
-                        super::nearest_ansi256_f32x4(lab),
-                        scalar256,
-                        "256color[x4] {:?} -> {:?}",
-                        (r, g, b),
-                        lab,
-                    );
-                    assert_eq!(
-                        super::nearest_ansi256_f32x8(lab),
+                        super::nearest_ansi256(lab),
                         scalar256,
                         "256color[x8] {:?} -> {:?}",
                         (r, g, b),
@@ -245,15 +304,15 @@ mod test {
                     #[cfg(feature = "88color")]
                     {
                         let scalar88 = crate::imp::fallback::nearest_ansi88(lab);
+                        // assert_eq!(
+                        //     super::nearest_ansi88_f32x4(lab),
+                        //     scalar88,
+                        //     "88color[x4] {:?} -> {:?}",
+                        //     (r, g, b),
+                        //     lab,
+                        // );
                         assert_eq!(
-                            super::nearest_ansi88_f32x4(lab),
-                            scalar88,
-                            "88color[x4] {:?} -> {:?}",
-                            (r, g, b),
-                            lab,
-                        );
-                        assert_eq!(
-                            super::nearest_ansi88_f32x8(lab),
+                            super::nearest_ansi88(lab),
                             scalar88,
                             "88color[x8] {:?} -> {:?}",
                             (r, g, b),

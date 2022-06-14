@@ -27,7 +27,7 @@ pub(crate) mod cached {
 #[allow(dead_code)]
 pub(crate) mod fallback;
 
-pub(crate) mod lab;
+pub(crate) mod oklab;
 pub(crate) mod tab;
 
 #[cfg(all(
@@ -36,12 +36,12 @@ pub(crate) mod tab;
     target_feature = "sse2",
     not(miri),
 ))]
+#[path = "simd/x86.rs"]
 pub(crate) mod simd_x86;
 
-#[cfg(all(
-    feature = "unstable-portable-simd",
-    any(benchmarking, not(any(target_arch = "x86_64", target_arch = "x86"))),
-))]
+#[cfg(all(feature = "unstable-portable-simd"))]
+#[path = "simd/stdsimd.rs"]
+#[allow(dead_code)]
 pub(crate) mod simd_portable;
 
 #[cfg(all(
@@ -50,6 +50,7 @@ pub(crate) mod simd_portable;
     target_feature = "neon",
     not(miri)
 ))]
+#[path = "simd/neon.rs"]
 pub(crate) mod simd_neon;
 
 #[inline]
@@ -111,13 +112,13 @@ pub(crate) fn nearest_ansi88(r: u8, g: u8, b: u8) -> u8 {
 
 #[inline]
 pub(crate) fn nearest_ansi256_direct(r: u8, g: u8, b: u8) -> u8 {
-    lab_nearest_ansi256(lab::Lab::from_srgb8(r, g, b))
+    lab_nearest_ansi256(oklab::OkLab::from_srgb8(r, g, b))
 }
 
 #[inline]
 #[cfg(feature = "88color")]
 pub(crate) fn nearest_ansi88_direct(r: u8, g: u8, b: u8) -> u8 {
-    lab_nearest_ansi88(lab::Lab::from_srgb8(r, g, b))
+    lab_nearest_ansi88(oklab::OkLab::from_srgb8(r, g, b))
 }
 
 // helper macro to reduce cfg boilerplate
@@ -137,13 +138,19 @@ pub(crate) fn nearest_ansi88_direct(r: u8, g: u8, b: u8) -> u8 {
 cfg_if::cfg_if! {
     if #[cfg(any(
         not(feature = "simd"),
-        not(any(target_arch = "x86_64", target_arch = "x86")),
-        not(target_feature = "sse2"),
+        not(any(
+            all(any(target_arch = "x86_64", target_arch = "x86"), target_feature = "sse2"),
+            all(target_arch = "aarch64", target_feature = "neon"),
+        )),
         miri,
     ))] {
         use fallback::nearest_ansi256 as lab_nearest_ansi256;
         #[cfg(feature = "88color")]
         use fallback::nearest_ansi88 as lab_nearest_ansi88;
+    } else if  #[cfg(all(feature = "simd", target_arch = "aarch64", target_feature = "neon"))] {
+        use simd_neon::nearest_ansi256_neon as lab_nearest_ansi256;
+        #[cfg(feature = "88color")]
+        use simd_neon::nearest_ansi88_neon as lab_nearest_ansi88;
     } else if #[cfg(all(feature = "simd-avx", any(target_arch = "x86_64", target_arch = "x86"), target_feature = "avx"))] {
         use simd_x86::nearest_ansi256_static_avx as lab_nearest_ansi256;
         #[cfg(feature = "88color")]
@@ -156,5 +163,23 @@ cfg_if::cfg_if! {
         use simd_x86::nearest_ansi256_sse2 as lab_nearest_ansi256;
         #[cfg(feature = "88color")]
         use simd_x86::nearest_ansi88_sse2 as lab_nearest_ansi88;
+    }
+}
+
+#[repr(C, align(64))]
+#[derive(Copy, Clone)]
+pub(crate) struct A64<T: ?Sized>(pub T);
+
+impl<T: ?Sized> core::ops::Deref for A64<T> {
+    type Target = T;
+    #[inline]
+    fn deref(&self) -> &T {
+        &self.0
+    }
+}
+impl<T: ?Sized> core::ops::DerefMut for A64<T> {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut T {
+        &mut self.0
     }
 }
