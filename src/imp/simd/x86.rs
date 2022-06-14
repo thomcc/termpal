@@ -1,4 +1,4 @@
-use crate::imp::{lab::*, tab};
+use crate::imp::{oklab::*, tab};
 #[cfg(target_arch = "x86")]
 use core::arch::x86::*;
 #[cfg(target_arch = "x86_64")]
@@ -241,7 +241,7 @@ fn nearest_dynsimd(l: f32, a: f32, b: f32, palette: &[Lab8]) -> usize {
 
 #[inline]
 #[cfg(feature = "88color")]
-pub(crate) fn nearest_ansi88_sse2(l: Lab) -> u8 {
+pub(crate) fn nearest_ansi88_sse2(l: OkLab) -> u8 {
     static_assert!(cfg!(target_feature = "sse2"));
     let r = unsafe { nearest_sse2(l.l, l.a, l.b, &tab::LAB_ROWS_ANSI88) };
     debug_assert!(r < 88, "{}", r);
@@ -249,7 +249,7 @@ pub(crate) fn nearest_ansi88_sse2(l: Lab) -> u8 {
 }
 
 #[inline]
-pub(crate) fn nearest_ansi256_sse2(l: Lab) -> u8 {
+pub(crate) fn nearest_ansi256_sse2(l: OkLab) -> u8 {
     static_assert!(cfg!(target_feature = "sse2"));
     let r = unsafe { nearest_sse2(l.l, l.a, l.b, &tab::LAB_ROWS_ANSI256) };
     debug_assert!(r < 256, "{}", r);
@@ -259,7 +259,7 @@ pub(crate) fn nearest_ansi256_sse2(l: Lab) -> u8 {
 #[target_feature(enable = "avx")]
 #[cfg(feature = "simd-avx")]
 #[cfg(any(test, benchmarking))]
-pub(crate) unsafe fn nearest_ansi256_unsafe_avx(l: Lab) -> u8 {
+pub(crate) unsafe fn nearest_ansi256_unsafe_avx(l: OkLab) -> u8 {
     let r = nearest_avx(l.l, l.a, l.b, &tab::LAB_ROWS_ANSI256);
     debug_assert!(r < 256, "{}", r);
     r as u8
@@ -268,7 +268,7 @@ pub(crate) unsafe fn nearest_ansi256_unsafe_avx(l: Lab) -> u8 {
 #[target_feature(enable = "avx")]
 #[cfg(all(feature = "simd-avx", feature = "88color"))]
 #[cfg(any(test, benchmarking))]
-pub(crate) unsafe fn nearest_ansi88_unsafe_avx(l: Lab) -> u8 {
+pub(crate) unsafe fn nearest_ansi88_unsafe_avx(l: OkLab) -> u8 {
     let r = nearest_avx(l.l, l.a, l.b, &tab::LAB_ROWS_ANSI88);
     debug_assert!(r < 88, "{}", r);
     r as u8
@@ -276,14 +276,14 @@ pub(crate) unsafe fn nearest_ansi88_unsafe_avx(l: Lab) -> u8 {
 
 #[inline]
 #[cfg(feature = "simd-runtime-avx")]
-pub(crate) fn nearest_ansi256_dynsimd(l: Lab) -> u8 {
+pub(crate) fn nearest_ansi256_dynsimd(l: OkLab) -> u8 {
     let r = nearest_dynsimd(l.l, l.a, l.b, &tab::LAB_ROWS_ANSI256);
     debug_assert!(r < 256, "{}", r);
     r as u8
 }
 
 #[cfg(all(feature = "simd-runtime-avx", feature = "88color"))]
-pub(crate) fn nearest_ansi88_dynsimd(l: Lab) -> u8 {
+pub(crate) fn nearest_ansi88_dynsimd(l: OkLab) -> u8 {
     let r = nearest_dynsimd(l.l, l.a, l.b, &tab::LAB_ROWS_ANSI88);
     debug_assert!(r < 88, "{}", r);
     r as u8
@@ -304,7 +304,7 @@ mod test {
         for r in 0..=255 {
             for g in 0..=255 {
                 for b in 0..=255 {
-                    let lab = Lab::from_srgb8(r, g, b);
+                    let lab = OkLab::from_srgb8(r, g, b);
                     let scalar256 = crate::imp::fallback::nearest_ansi256(lab);
                     assert_eq!(
                         super::nearest_ansi256_sse2(lab),

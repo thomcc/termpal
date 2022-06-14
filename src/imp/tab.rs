@@ -1347,7 +1347,7 @@ mod test {
         colors
     }
     #[test]
-    #[cfg(any())]
+    // #[cfg(any())]
     fn test_ansi_tables() {
         assert_eq!(&gen_colors_256()[16..], &ANSI256_RGB[..]);
         assert_eq!(&gen_colors_256()[..16], &ANSI16_TO_RGB[..]);
