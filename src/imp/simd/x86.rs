@@ -120,9 +120,9 @@ pub(crate) unsafe fn nearest_sse2(l: f32, a: f32, b: f32, palette: &[Lab8]) -> u
     let mask = _mm_movemask_ps(_mm_cmpeq_ps(best, bdist)) & 0xf;
     // debug_assert_ne!(best_chunk_mask, 0);
     const MASK_TO_FIRST_INDEX: [u8; 16] = [0, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0];
-    // Note: `best_chunk + 16 + mask.trailing_zeroes() as usize` is
+    // Note: `best_chunk + mask.trailing_zeroes() as usize` is
     // basically the same (but IIRC slower)
-    best_chunk + (MASK_TO_FIRST_INDEX[mask as usize] as usize) + 16
+    best_chunk + (MASK_TO_FIRST_INDEX[mask as usize] as usize)
 }
 
 #[target_feature(enable = "avx")]
@@ -138,17 +138,18 @@ pub(crate) unsafe fn nearest_avx(l: f32, a: f32, b: f32, palette: &[Lab8]) -> us
         core::slice::from_raw_parts(palette.as_ptr() as *const [__m256; 3], palette.len());
 
     debug_assert!(!palette.is_empty());
-    // index of best chunk so far
-    let mut best_chunk: usize = 0;
 
-    // closest (squared) distance repated 4x in a row
+    // Index of best chunk so far.
+    let mut best_chunk: usize = usize::MAX;
+
+    // closest (squared) distance repated 8x in a row
     let mut best = _mm256_set1_ps(f32::MAX);
 
     // `dists` for the entries of best_chunk. we compare with `best` to
     // figure out the index in `best_chunk`.
     let mut best_dists = _mm256_set1_ps(f32::MAX);
 
-    // splat each entry e.g. `col_lx8` is `[l, l, l, l]`.
+    // splat each entry e.g. `col_lx8` is `[l,l,l,l, l,l,l,l]`.
     let col_lx8 = _mm256_set1_ps(l);
     let col_ax8 = _mm256_set1_ps(a);
     let col_bx8 = _mm256_set1_ps(b);
@@ -157,53 +158,53 @@ pub(crate) unsafe fn nearest_avx(l: f32, a: f32, b: f32, palette: &[Lab8]) -> us
         // chunk contains 8 Lab colors. compute the distance between `col` and
         // all 8 colors at once using the sum of squared distances.
 
-        // `l` is [l0, l1, l2, l3, l4, l5, l6, l7, l8]
+        // `l` is [l0, l1, l2, l3, l4, l5, l6, l7]
         let l = chunk[0];
-        // `a` is [a0, a1, a2, a3, a4, a5, a6, a7, a8]
+        // `a` is [a0, a1, a2, a3, a4, a5, a6, a7]
         let a = chunk[1];
-        // `b` is [b0, b1, b2, b3, b4, b5, b6, b7, b8]
+        // `b` is [b0, b1, b2, b3, b4, b5, b6, b7]
         let b = chunk[2];
 
-        // compute deltas
+        // Compute deltas
         let dl = _mm256_sub_ps(l, col_lx8);
         let da = _mm256_sub_ps(a, col_ax8);
         let db = _mm256_sub_ps(b, col_bx8);
 
-        // square each delta
-        let dldl = _mm256_mul_ps(dl, dl);
-        let dada = _mm256_mul_ps(da, da);
-        let dbdb = _mm256_mul_ps(db, db);
+        // Square each delta
+        let dlsq = _mm256_mul_ps(dl, dl);
+        let dasq = _mm256_mul_ps(da, da);
+        let dbsq = _mm256_mul_ps(db, db);
 
-        // sum them to get the squared distances
-        let dists = _mm256_add_ps(dldl, _mm256_add_ps(dada, dbdb));
+        // Sum them to get the squared distances
+        let dists = _mm256_add_ps(dlsq, _mm256_add_ps(dasq, dbsq));
 
-        // see if any entry is closer than our current best
+        // See if any entry is closer than our current best
         let ltmask = _mm256_cmp_ps(dists, best, _CMP_LT_OQ);
 
         if _mm256_movemask_ps(ltmask) != 0 {
             // Just mark the start index and both chunks. sort it out later.
-            best_chunk = i * 8;
+            best_chunk = i;
             best_dists = dists;
 
-            // expand the new min distance to all 8 lanes of `best`.
+            // Expand the new min distance to all 8 lanes of `best`.
             best = _mm256_min_ps(best, dists);
             best = _mm256_min_ps(best, _mm256_permute_ps(best, shuf![1, 0, 3, 2]));
             best = _mm256_min_ps(best, _mm256_permute_ps(best, shuf![2, 3, 0, 1]));
             best = _mm256_min_ps(best, _mm256_permute2f128_ps(best, best, 1));
         }
     }
-    // TODO: this is dumb
-    // We need to see which index `best` is in `best4` to see how much we
-    // should add to `best_start` to return.
+    debug_assert_ne!(best_chunk, usize::MAX);
+    // It is now later, so we must sort it out.
     //
-    // Compute the mask, and then use that mask to index into a lookup table
-    // that says which value to use.
+    // We know that the best value came from the chunk with index `best_chunk`,
+    // but not which index within that chunk.
+    //
+    // However, we know that `best` is the value within that chunk repeated 8
+    // times, so find the index of a value within `best_dists` that happens to
+    // be equal to the `best` value.
     let mask = _mm256_movemask_ps(_mm256_cmp_ps(best, best_dists, _CMP_EQ_OQ)) as u8;
     debug_assert!(mask != 0);
-    best_chunk + (mask.trailing_zeros() as usize) + 16
-    // Note: `best_chunk + 16 + mask.trailing_zeroes() as usize` is
-    // basically the same (but IIRC slower)
-    // best_chunk + (MASK_TO_FIRST_INDEX[mask as usize] as usize)
+    (best_chunk * 8) + (mask.trailing_zeros() as usize)
 }
 
 #[inline]
@@ -244,16 +245,16 @@ fn nearest_dynsimd(l: f32, a: f32, b: f32, palette: &[Lab8]) -> usize {
 pub(crate) fn nearest_ansi88_sse2(l: OkLab) -> u8 {
     static_assert!(cfg!(target_feature = "sse2"));
     let r = unsafe { nearest_sse2(l.l, l.a, l.b, &tab::LAB_ROWS_ANSI88) };
-    debug_assert!(r < 88, "{}", r);
-    r as u8
+    debug_assert!(r < 88 - 16, "{}", r);
+    r as u8 + 16
 }
 
 #[inline]
 pub(crate) fn nearest_ansi256_sse2(l: OkLab) -> u8 {
     static_assert!(cfg!(target_feature = "sse2"));
     let r = unsafe { nearest_sse2(l.l, l.a, l.b, &tab::LAB_ROWS_ANSI256) };
-    debug_assert!(r < 256, "{}", r);
-    r as u8
+    debug_assert!(r < 256 - 16, "{}", r);
+    r as u8 + 16
 }
 
 #[target_feature(enable = "avx")]
@@ -261,8 +262,8 @@ pub(crate) fn nearest_ansi256_sse2(l: OkLab) -> u8 {
 #[cfg(any(test, benchmarking))]
 pub(crate) unsafe fn nearest_ansi256_unsafe_avx(l: OkLab) -> u8 {
     let r = nearest_avx(l.l, l.a, l.b, &tab::LAB_ROWS_ANSI256);
-    debug_assert!(r < 256, "{}", r);
-    r as u8
+    debug_assert!(r < 256 - 16, "{}", r);
+    r as u8 + 16
 }
 
 #[target_feature(enable = "avx")]
@@ -270,23 +271,23 @@ pub(crate) unsafe fn nearest_ansi256_unsafe_avx(l: OkLab) -> u8 {
 #[cfg(any(test, benchmarking))]
 pub(crate) unsafe fn nearest_ansi88_unsafe_avx(l: OkLab) -> u8 {
     let r = nearest_avx(l.l, l.a, l.b, &tab::LAB_ROWS_ANSI88);
-    debug_assert!(r < 88, "{}", r);
-    r as u8
+    debug_assert!(r < 88 - 16, "{}", r);
+    r as u8 + 16
 }
 
 #[inline]
 #[cfg(feature = "simd-runtime-avx")]
 pub(crate) fn nearest_ansi256_dynsimd(l: OkLab) -> u8 {
     let r = nearest_dynsimd(l.l, l.a, l.b, &tab::LAB_ROWS_ANSI256);
-    debug_assert!(r < 256, "{}", r);
-    r as u8
+    debug_assert!(r < 256 - 16, "{}", r);
+    r as u8 + 16
 }
 
 #[cfg(all(feature = "simd-runtime-avx", feature = "88color"))]
 pub(crate) fn nearest_ansi88_dynsimd(l: OkLab) -> u8 {
     let r = nearest_dynsimd(l.l, l.a, l.b, &tab::LAB_ROWS_ANSI88);
-    debug_assert!(r < 88, "{}", r);
-    r as u8
+    debug_assert!(r < 88 - 16, "{}", r);
+    r as u8 + 16
 }
 
 #[cfg(test)]
@@ -299,7 +300,7 @@ mod test {
         #[cfg(feature = "simd-runtime-avx")]
         let have_avx = core_detect::is_x86_feature_detected!("avx");
         #[cfg(not(feature = "simd-runtime-avx"))]
-        let have_avx = std::is_x86_feature_detected!("avx");
+        let _have_avx = std::is_x86_feature_detected!("avx");
 
         for r in 0..=255 {
             for g in 0..=255 {
@@ -314,7 +315,7 @@ mod test {
                         lab,
                     );
                     #[cfg(feature = "simd-avx")]
-                    if have_avx {
+                    if _have_avx {
                         assert_eq!(
                             unsafe { super::nearest_ansi256_unsafe_avx(lab) },
                             scalar256,
@@ -342,7 +343,7 @@ mod test {
                             lab,
                         );
                         #[cfg(feature = "simd-avx")]
-                        if have_avx {
+                        if _have_avx {
                             assert_eq!(
                                 unsafe { super::nearest_ansi88_unsafe_avx(lab) },
                                 scalar88,

@@ -40,24 +40,13 @@ pub(crate) unsafe fn nearest_neon(l: f32, a: f32, b: f32, palette: &[Lab8]) -> u
     let mut cur_index_x: uint32x4_t = core::mem::transmute([0u32, 1, 2, 3]);
     let mut cur_index_y: uint32x4_t = core::mem::transmute([4u32, 5, 6, 7]);
 
-    let mut best_idxs_x: uint32x4_t = vdupq_n_u32(u32::MAX);
-    let mut best_idxs_y: uint32x4_t = vdupq_n_u32(u32::MAX);
+    let mut minidxs_x: uint32x4_t = vdupq_n_u32(u32::MAX);
+    let mut minidxs_y: uint32x4_t = vdupq_n_u32(u32::MAX);
 
     let mut min_x = vdupq_n_f32(f32::INFINITY);
     let mut min_y = vdupq_n_f32(f32::INFINITY);
 
-    for chunk in chunks.iter() {
-        // chunk contains 8 Lab colors. compute the distance between `col` and
-        // all 8 colors at once using the sum of squared distances.
-        let xl = chunk[0][0]; // `xl` is [l0, l1, l2, l3]
-        let xa = chunk[1][0]; // `xa` is [a0, a1, a2, a3]
-        let xb = chunk[2][0]; // `xb` is [b0, b1, b2, b3]
-
-        let yl = chunk[0][1]; // `yl` is [l5, l6, l7, l8]
-        let ya = chunk[1][1]; // `ya` is [a5, a6, a7, a8]
-        let yb = chunk[2][1]; // `yb` is [b5, b6, b7, b8]
-
-        // compute deltas
+    for &[[xl, yl], [xa, ya], [xb, yb]] in chunks.iter() {
         let xdl = vsubq_f32(xl, col_lx4);
         let xda = vsubq_f32(xa, col_ax4);
         let xdb = vsubq_f32(xb, col_bx4);
@@ -82,33 +71,48 @@ pub(crate) unsafe fn nearest_neon(l: f32, a: f32, b: f32, palette: &[Lab8]) -> u
 
         let xmask = vcltq_f32(xdists, min_x);
         min_x = vbslq_f32(xmask, xdists, min_x);
-        best_idxs_x = vbslq_u32(xmask, cur_index_x, best_idxs_x);
+        minidxs_x = vbslq_u32(xmask, cur_index_x, minidxs_x);
 
         let ymask = vcltq_f32(ydists, min_y);
         min_y = vbslq_f32(ymask, ydists, min_y);
-        best_idxs_y = vbslq_u32(ymask, cur_index_y, best_idxs_y);
+        minidxs_y = vbslq_u32(ymask, cur_index_y, minidxs_y);
 
         cur_index_x = vaddq_u32(cur_index_x, eight);
         cur_index_y = vaddq_u32(cur_index_y, eight);
     }
+    // TODO: do this for both `x` and `y` at the same time, this is goofy.
+    let min_hi_x = vget_high_f32(min_x);
+    let min_lo_x = vget_low_f32(min_x);
+    let mask_hl_x = vclt_f32(min_hi_x, min_lo_x);
+    let min_hl_x = vbsl_f32(mask_hl_x, min_hi_x, min_lo_x);
+    let idx_hl_x = vbsl_u32(mask_hl_x, vget_high_u32(minidxs_x), vget_low_u32(minidxs_x));
+    let min_odd_x = vdup_lane_f32(min_hl_x, 1);
+    let idx_odd_x = vdup_lane_u32(idx_hl_x, 1);
+    let mask_x = vclt_f32(min_odd_x, min_hl_x);
+    let min_x2 = vbsl_f32(mask_x, min_odd_x, min_hl_x);
+    let idx_x2 = vbsl_u32(mask_x, idx_odd_x, idx_hl_x);
 
-    let mask_xy = vcltq_f32(min_x, min_y);
-    let min_xy = vbslq_f32(mask_xy, min_x, min_y);
-    let min_idx_xy = vbslq_u32(mask_xy, best_idxs_x, best_idxs_y);
+    let min_hi_y = vget_high_f32(min_y);
+    let min_lo_y = vget_low_f32(min_y);
+    let mask_hl_y = vclt_f32(min_hi_y, min_lo_y);
+    let min_hl_y = vbsl_f32(mask_hl_y, min_hi_y, min_lo_y);
+    let idx_hl_y = vbsl_u32(mask_hl_y, vget_high_u32(minidxs_y), vget_low_u32(minidxs_y));
+    let min_odd_y = vdup_lane_f32(min_hl_y, 1);
+    let idx_odd_y = vdup_lane_u32(idx_hl_y, 1);
+    let mask_y = vclt_f32(min_odd_y, min_hl_y);
+    let min_y2 = vbsl_f32(mask_y, min_odd_y, min_hl_y);
+    let idx_y2 = vbsl_u32(mask_y, idx_odd_y, idx_hl_y);
 
-    let mask_xy_01 = vclt_f32(vget_low_f32(min_xy), vget_high_f32(min_xy));
-    let min_xy_01 = vbsl_f32(mask_xy_01, vget_low_f32(min_xy), vget_high_f32(min_xy));
-    let min_idx_xy_01 = vbsl_u32(
-        mask_xy_01,
-        vget_low_u32(min_idx_xy),
-        vget_high_u32(min_idx_xy),
-    );
+    let mask_xy2 = vclt_f32(min_x2, min_y2);
+    let min_xy2 = vbsl_f32(mask_xy2, min_x2, min_y2);
+    let idx_xy2 = vbsl_u32(mask_xy2, idx_x2, idx_y2);
 
-    let [m0, m1]: [f32; 2] = core::mem::transmute(min_xy_01);
-    let [i0, i1]: [u32; 2] = core::mem::transmute(min_idx_xy_01);
+    let [m0, m1]: [f32; 2] = core::mem::transmute(min_xy2);
+    let [i0, i1]: [u32; 2] = core::mem::transmute(idx_xy2);
+
     let res_idx = if m0 < m1 { i0 } else { i1 };
     debug_assert!(res_idx != u32::MAX);
-    (res_idx as usize) + 16
+    res_idx as usize
 }
 
 #[inline]
@@ -117,8 +121,8 @@ pub(crate) unsafe fn nearest_neon(l: f32, a: f32, b: f32, palette: &[Lab8]) -> u
 pub(crate) fn nearest_ansi88_neon(l: OkLab) -> u8 {
     // Safety: Safe because we're guarded by the proper `cfg!(target_feature)`
     let r = unsafe { nearest_neon(l.l, l.a, l.b, &tab::LAB_ROWS_ANSI88) };
-    debug_assert!(r < 88, "{}", r);
-    r as u8
+    debug_assert!(r < 88 - 16, "{}", r);
+    r as u8 + 16
 }
 
 #[inline]
@@ -126,8 +130,8 @@ pub(crate) fn nearest_ansi88_neon(l: OkLab) -> u8 {
 pub(crate) fn nearest_ansi256_neon(l: OkLab) -> u8 {
     // Safety: Safe because we're guarded by the proper `cfg!(target_feature)`
     let r = unsafe { nearest_neon(l.l, l.a, l.b, &tab::LAB_ROWS_ANSI256) };
-    debug_assert!(r < 256, "{}", r);
-    r as u8
+    debug_assert!(r < 256 - 16, "{}", r);
+    r as u8 + 16
 }
 
 #[cfg(test)]

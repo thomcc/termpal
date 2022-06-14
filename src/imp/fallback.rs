@@ -4,15 +4,15 @@ use crate::imp::{oklab::OkLab, tab};
 pub(crate) fn nearest_ansi256(l: OkLab) -> u8 {
     let r = nearest_impl(l, &tab::LAB_PALETTE_ANSI256[..]);
     debug_assert!(r < 256, "{}", r);
-    r as u8
+    r as u8 + 16
 }
 
 #[inline]
 #[cfg(feature = "88color")]
 pub(crate) fn nearest_ansi88(l: OkLab) -> u8 {
     let r = nearest_impl(l, &tab::LAB_PALETTE_ANSI88[..]);
-    debug_assert!(r < 88, "{}", r);
-    r as u8
+    debug_assert!(r < 88 - 16, "{}", r);
+    r as u8 + 16
 }
 
 #[inline]
@@ -30,13 +30,13 @@ pub(crate) fn nearest_impl(v: OkLab, table: &[OkLab]) -> usize {
             bi = i;
         }
     }
-    bi + 16
-}
+    return bi;
 
-#[inline]
-pub(crate) fn euc_dist_sq(a: &OkLab, b: &OkLab) -> f32 {
-    let dl = a.l - b.l;
-    let da = a.a - b.a;
-    let db = a.b - b.b;
-    (dl * dl) + (da * da) + (db * db)
+    #[inline]
+    fn euc_dist_sq(a: &OkLab, b: &OkLab) -> f32 {
+        let dl = a.l - b.l;
+        let da = a.a - b.a;
+        let db = a.b - b.b;
+        (dl * dl) + (da * da) + (db * db)
+    }
 }

@@ -1421,8 +1421,6 @@ mod test {
             .iter()
             .map(|&(r, g, b)| {
                 crate::imp::fallback::nearest_impl(OkLab::from_srgb8(r, g, b), &lab16)
-                    .checked_sub(16)
-                    .unwrap()
                     .try_into()
                     .unwrap()
             })
@@ -1433,8 +1431,6 @@ mod test {
             let expect = idx2named((i + 16).try_into().unwrap(), &TO_16_NEAREST);
             assert!(expect <= 0xf);
             let found: u8 = crate::imp::fallback::nearest_impl(OkLab::from_srgb8(r, g, b), &lab16)
-                .checked_sub(16)
-                .unwrap()
                 .try_into()
                 .unwrap();
             assert_eq!(found, expect, "{:?}", (i, r, g, b, expect, found));
