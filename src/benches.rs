@@ -157,6 +157,41 @@ fn nearest_single_full_fallback_256(b: &mut test::Bencher) {
 }
 
 #[bench]
+#[cfg(feature = "88color")]
+fn nearest_single_full_fallback_88(b: &mut test::Bencher) {
+    let mut i = 0;
+    b.iter(|| {
+        let (r, g, b) = black_box(COMMON[i]);
+        i = (i + 1) % COMMON.len();
+        let n = nearest_ansi88_fallback(r, g, b);
+        black_box(n);
+    });
+}
+
+#[bench]
+fn nearest_single_full_kdtree_256(b: &mut test::Bencher) {
+    let mut i = 0;
+    b.iter(|| {
+        let (r, g, b) = black_box(COMMON[i]);
+        i = (i + 1) % COMMON.len();
+        let n = crate::imp::kd::nearest_ansi256(Lab::from_srgb8(r, g, b));
+        black_box(n);
+    });
+}
+
+#[bench]
+#[cfg(feature = "88color")]
+fn nearest_single_full_kdtree_88(b: &mut test::Bencher) {
+    let mut i = 0;
+    b.iter(|| {
+        let (r, g, b) = black_box(COMMON[i]);
+        i = (i + 1) % COMMON.len();
+        let n = crate::imp::kd::nearest_ansi88(Lab::from_srgb8(r, g, b));
+        black_box(n);
+    });
+}
+
+#[bench]
 fn nearest_single_searchonly_fallback_256(b: &mut test::Bencher) {
     let mut i = 0;
     let common_lab = COMMON
@@ -180,6 +215,37 @@ fn nearest_many_searchonly_fallback_256(b: &mut test::Bencher) {
     b.iter(|| {
         for &(l, a, b) in &black_box(&common_lab)[..256] {
             let n = crate::imp::fallback::nearest_ansi256(Lab { l, a, b });
+            black_box(n);
+        }
+    });
+}
+
+#[bench]
+#[cfg(feature = "88color")]
+fn nearest_single_searchonly_fallback_88(b: &mut test::Bencher) {
+    let mut i = 0;
+    let common_lab = COMMON
+        .iter()
+        .map(|c| rgb2oklab(c.0, c.1, c.2))
+        .collect::<Vec<_>>();
+    b.iter(|| {
+        let (l, a, b) = black_box(common_lab[i]);
+        i = (i + 1) % common_lab.len();
+        let n = crate::imp::fallback::nearest_ansi88(Lab { l, a, b });
+        black_box(n);
+    });
+}
+
+#[bench]
+#[cfg(feature = "88color")]
+fn nearest_many_searchonly_fallback_88(b: &mut test::Bencher) {
+    let common_lab = COMMON
+        .iter()
+        .map(|c| rgb2oklab(c.0, c.1, c.2))
+        .collect::<Vec<_>>();
+    b.iter(|| {
+        for &(l, a, b) in &black_box(&common_lab)[..256] {
+            let n = crate::imp::fallback::nearest_ansi88(Lab { l, a, b });
             black_box(n);
         }
     });
@@ -216,7 +282,7 @@ fn nearest_many_searchonly_kdtree_256(b: &mut test::Bencher) {
 
 #[bench]
 #[cfg(feature = "88color")]
-fn nearest_single_searchonly_fallback_88(b: &mut test::Bencher) {
+fn nearest_single_searchonly_kdtree_88(b: &mut test::Bencher) {
     let mut i = 0;
     let common_lab = COMMON
         .iter()
@@ -225,21 +291,21 @@ fn nearest_single_searchonly_fallback_88(b: &mut test::Bencher) {
     b.iter(|| {
         let (l, a, b) = black_box(common_lab[i]);
         i = (i + 1) % common_lab.len();
-        let n = crate::imp::fallback::nearest_ansi88(Lab { l, a, b });
+        let n = crate::imp::kd::nearest_ansi88(Lab { l, a, b });
         black_box(n);
     });
 }
 
 #[bench]
 #[cfg(feature = "88color")]
-fn nearest_many_searchonly_fallback_88(b: &mut test::Bencher) {
+fn nearest_many_searchonly_kdtree_88(b: &mut test::Bencher) {
     let common_lab = COMMON
         .iter()
         .map(|c| rgb2oklab(c.0, c.1, c.2))
         .collect::<Vec<_>>();
     b.iter(|| {
         for &(l, a, b) in &black_box(&common_lab)[..256] {
-            let n = crate::imp::fallback::nearest_ansi88(Lab { l, a, b });
+            let n = crate::imp::kd::nearest_ansi88(Lab { l, a, b });
             black_box(n);
         }
     });
@@ -280,6 +346,11 @@ pub fn rgb2oklab(r: u8, g: u8, b: u8) -> (f32, f32, f32) {
 #[inline]
 pub fn nearest_ansi256_fallback(r: u8, g: u8, b: u8) -> u8 {
     crate::imp::fallback::nearest_ansi256(Lab::from_srgb8(r, g, b))
+}
+#[inline]
+#[cfg(feature = "88color")]
+pub fn nearest_ansi88_fallback(r: u8, g: u8, b: u8) -> u8 {
+    crate::imp::fallback::nearest_ansi88(Lab::from_srgb8(r, g, b))
 }
 
 #[cfg(feature = "unstable-portable-simd")]
@@ -690,6 +761,22 @@ items! {
                 let n = simd_neon::nearest_ansi88_neon(Lab { l, a, b });
                 black_box(n);
             }
+        });
+    }
+
+    #[bench]
+    #[cfg(feature = "88color")]
+    fn nearest_single_searchonly_neon_88(b: &mut test::Bencher) {
+        let mut i = 0;
+        let common_lab = COMMON
+            .iter()
+            .map(|c| rgb2oklab(c.0, c.1, c.2))
+            .collect::<Vec<_>>();
+        b.iter(|| {
+            let (l, a, b) = black_box(common_lab[i]);
+            i = (i + 1) % common_lab.len();
+            let n = simd_neon::nearest_ansi88_neon(Lab { l, a, b });
+            black_box(n);
         });
     }
 

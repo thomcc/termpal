@@ -125,7 +125,7 @@ pub(crate) unsafe fn nearest_sse2(l: f32, a: f32, b: f32, palette: &[Lab8]) -> u
 }
 
 #[cfg(feature = "simd-avx")]
-#[target_feature(enable = "avx2")]
+#[target_feature(enable = "avx2")] // TODO: might only need plain `avx`.
 pub(crate) unsafe fn nearest_avx(l: f32, a: f32, b: f32, palette: &[Lab8]) -> usize {
     // static assertions to check that a 3-wide array of 4-wide f32 vector must
     // have same size and align as lab4

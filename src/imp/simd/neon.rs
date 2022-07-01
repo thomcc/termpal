@@ -80,7 +80,46 @@ pub(crate) unsafe fn nearest_neon(l: f32, a: f32, b: f32, palette: &[Lab8]) -> u
         cur_index_x = vaddq_u32(cur_index_x, step);
         cur_index_y = vaddq_u32(cur_index_y, step);
     }
-    // TODO: do this for both `x` and `y` at the same time, this is goofy.
+    // This definitely does less work, and happens to always return the correct
+    // value for every possible input for the 256color table, but in theory it's
+    // wrong (it fails to compare some of the lanes against others, which *does*
+    // exhibit for the 88color table, hence the guard for the 256color one), and
+    // it doesn't actually make the benchmarks any faster.
+    //
+    // That said, we have exhaustive tests, so if it did help benchmarks, it
+    // would probably be fine to use as long as the tests say that for every
+    // possible (r, g, b) input, it's equivalent to the value computed by the
+    // `fallback` version. Because of this, I'm keeping it in, but cfg-ed off
+    // (well... for a little bit).
+    //
+    // Anyway, it's the busted buggy impl I wrote initially when not thinking
+    // carefully about this. It's probably a complete fluke it happens to work
+    // for the 256-color table (or else I'd be willing to use it, since it does
+    // save a few instructions).
+    #[cfg(any())]
+    if palette.len() * 8 == 240 {
+        let mask_xy = vcltq_f32(min_x, min_y);
+        let min_xy = vbslq_f32(mask_xy, min_x, min_y);
+        let min_idx_xy = vbslq_u32(mask_xy, min_idx_x, min_idx_y);
+
+        let mask_xy_01 = vclt_f32(vget_low_f32(min_xy), vget_high_f32(min_xy));
+        let min_xy_01 = vbsl_f32(mask_xy_01, vget_low_f32(min_xy), vget_high_f32(min_xy));
+        let min_idx_xy_01 = vbsl_u32(
+            mask_xy_01,
+            vget_low_u32(min_idx_xy),
+            vget_high_u32(min_idx_xy),
+        );
+
+        let [m0, m1]: [f32; 2] = core::mem::transmute(min_xy_01);
+        let [i0, i1]: [u32; 2] = core::mem::transmute(min_idx_xy_01);
+        let res_idx = if m0 < m1 { i0 } else { i1 };
+        debug_assert!(res_idx != u32::MAX);
+        return res_idx as usize;
+    }
+
+    // Ideally we'd do this for both `x` and `y` at the same time (using f32x4
+    // rather than pairs of f32x2). As it is, this is honestly pretty goofy.
+    // Eventually I'll try to get to this.
     let min_hi_x = vget_high_f32(min_x);
     let min_lo_x = vget_low_f32(min_x);
     let mask_hl_x = vclt_f32(min_hi_x, min_lo_x);

@@ -1,11 +1,12 @@
-//! This is unused code for now, although when `core::simd` stabilizes it may be
-//! revisited (probably only on platforms I don't care about enough to write an
-//! intrinsic-using impl...). Currently the moment, it's was between 1.5x and 2x
-//! slower than the versions that use intrinsics directly. This is a bummer, and
-//! is not enough to justify the maintenance cost.
+//! This is unused code for now, although when `core::simd` stabilizes I'll
+//! probably revisit it. The epilogue of the `nearest_f32x8` loop (where we find
+//! the index of the nearest value within the chunk that we know holds the
+//! nearest value, based on the f32x8 holding the distances), needs to be fixed,
+//! since it doesn't compare every lane vs every other (see how the `neon` impl
+//! finishes its inner loop for the basic idea).
 //!
-//! Written against `rustc 1.63.0-nightly (ec55c6130 2022-06-10)`'s version of
-//! `core::simd`.
+//! Anyway, I don't care to maintain unstable features for this, so it's
+//! entirely unused for now.
 use crate::imp::{oklab::*, tab};
 use core::simd::*;
 
@@ -85,21 +86,6 @@ fn nearest_f32x8(l: f32, a: f32, b: f32, palette: &[Lab8]) -> usize {
     debug_assert_ne!(res, u32::MAX);
     res as usize
 }
-
-// #[inline]
-// #[cfg(feature = "88color")]
-// pub(crate) fn nearest_ansi88_f32x4(l: OkLab) -> u8 {
-//     let r = nearest_f32x4(l.l, l.a, l.b, &tab::LAB_ROWS_ANSI88);
-//     debug_assert!(r < 88, "{}", r);
-//     r as u8
-// }
-
-// #[inline]
-// pub(crate) fn nearest_ansi256_f32x4(l: OkLab) -> u8 {
-//     let r = nearest_f32x4(l.l, l.a, l.b, &tab::LAB_ROWS_ANSI256);
-//     debug_assert!(r < 256, "{}", r);
-//     r as u8
-// }
 
 #[inline]
 #[cfg(feature = "88color")]
