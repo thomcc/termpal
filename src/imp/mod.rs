@@ -4,6 +4,8 @@ macro_rules! static_assert {
     };
 }
 
+pub(crate) mod kd;
+
 // These would fail `#[cfg(target_has_atomic_load_store="32")]`, which isn't
 // stable yet. We also allow you to manually specify this with
 // `--cfg=rgb_to_ansi_no_atomics`, for cases I've missed. (I'd rather not add a
@@ -39,10 +41,10 @@ pub(crate) mod tab;
 #[path = "simd/x86.rs"]
 pub(crate) mod simd_x86;
 
-#[cfg(all(feature = "unstable-portable-simd"))]
-#[path = "simd/stdsimd.rs"]
-#[allow(dead_code)]
-pub(crate) mod simd_portable;
+// #[cfg(all(feature = "unstable-portable-simd"))]
+// #[path = "simd/stdsimd.rs"]
+// #[allow(dead_code)]
+// pub(crate) mod simd_portable;
 
 #[cfg(all(
     feature = "simd",

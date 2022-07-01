@@ -3,7 +3,7 @@ use crate::imp::{oklab::OkLab, tab};
 #[inline]
 pub(crate) fn nearest_ansi256(l: OkLab) -> u8 {
     let r = nearest_impl(l, &tab::LAB_PALETTE_ANSI256[..]);
-    debug_assert!(r < 256, "{}", r);
+    debug_assert!(r < 256 - 16, "{}", r);
     r as u8 + 16
 }
 

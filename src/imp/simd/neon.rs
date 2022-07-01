@@ -34,14 +34,14 @@ pub(crate) unsafe fn nearest_neon(l: f32, a: f32, b: f32, palette: &[Lab8]) -> u
     let col_ax4 = vdupq_n_f32(a);
     let col_bx4 = vdupq_n_f32(b);
 
-    let eight: uint32x4_t = vdupq_n_u32(8u32);
+    let step: uint32x4_t = vdupq_n_u32(8u32);
 
     // TODO: prob a better way to do crate these.
     let mut cur_index_x: uint32x4_t = core::mem::transmute([0u32, 1, 2, 3]);
     let mut cur_index_y: uint32x4_t = core::mem::transmute([4u32, 5, 6, 7]);
 
-    let mut minidxs_x: uint32x4_t = vdupq_n_u32(u32::MAX);
-    let mut minidxs_y: uint32x4_t = vdupq_n_u32(u32::MAX);
+    let mut min_idx_x: uint32x4_t = vdupq_n_u32(u32::MAX);
+    let mut min_idx_y: uint32x4_t = vdupq_n_u32(u32::MAX);
 
     let mut min_x = vdupq_n_f32(f32::INFINITY);
     let mut min_y = vdupq_n_f32(f32::INFINITY);
@@ -71,21 +71,21 @@ pub(crate) unsafe fn nearest_neon(l: f32, a: f32, b: f32, palette: &[Lab8]) -> u
 
         let xmask = vcltq_f32(xdists, min_x);
         min_x = vbslq_f32(xmask, xdists, min_x);
-        minidxs_x = vbslq_u32(xmask, cur_index_x, minidxs_x);
+        min_idx_x = vbslq_u32(xmask, cur_index_x, min_idx_x);
 
         let ymask = vcltq_f32(ydists, min_y);
         min_y = vbslq_f32(ymask, ydists, min_y);
-        minidxs_y = vbslq_u32(ymask, cur_index_y, minidxs_y);
+        min_idx_y = vbslq_u32(ymask, cur_index_y, min_idx_y);
 
-        cur_index_x = vaddq_u32(cur_index_x, eight);
-        cur_index_y = vaddq_u32(cur_index_y, eight);
+        cur_index_x = vaddq_u32(cur_index_x, step);
+        cur_index_y = vaddq_u32(cur_index_y, step);
     }
     // TODO: do this for both `x` and `y` at the same time, this is goofy.
     let min_hi_x = vget_high_f32(min_x);
     let min_lo_x = vget_low_f32(min_x);
     let mask_hl_x = vclt_f32(min_hi_x, min_lo_x);
     let min_hl_x = vbsl_f32(mask_hl_x, min_hi_x, min_lo_x);
-    let idx_hl_x = vbsl_u32(mask_hl_x, vget_high_u32(minidxs_x), vget_low_u32(minidxs_x));
+    let idx_hl_x = vbsl_u32(mask_hl_x, vget_high_u32(min_idx_x), vget_low_u32(min_idx_x));
     let min_odd_x = vdup_lane_f32(min_hl_x, 1);
     let idx_odd_x = vdup_lane_u32(idx_hl_x, 1);
     let mask_x = vclt_f32(min_odd_x, min_hl_x);
@@ -96,7 +96,7 @@ pub(crate) unsafe fn nearest_neon(l: f32, a: f32, b: f32, palette: &[Lab8]) -> u
     let min_lo_y = vget_low_f32(min_y);
     let mask_hl_y = vclt_f32(min_hi_y, min_lo_y);
     let min_hl_y = vbsl_f32(mask_hl_y, min_hi_y, min_lo_y);
-    let idx_hl_y = vbsl_u32(mask_hl_y, vget_high_u32(minidxs_y), vget_low_u32(minidxs_y));
+    let idx_hl_y = vbsl_u32(mask_hl_y, vget_high_u32(min_idx_y), vget_low_u32(min_idx_y));
     let min_odd_y = vdup_lane_f32(min_hl_y, 1);
     let idx_odd_y = vdup_lane_u32(idx_hl_y, 1);
     let mask_y = vclt_f32(min_odd_y, min_hl_y);
@@ -111,7 +111,7 @@ pub(crate) unsafe fn nearest_neon(l: f32, a: f32, b: f32, palette: &[Lab8]) -> u
     let [i0, i1]: [u32; 2] = core::mem::transmute(idx_xy2);
 
     let res_idx = if m0 < m1 { i0 } else { i1 };
-    debug_assert!(res_idx != u32::MAX);
+    debug_assert_ne!(res_idx, u32::MAX);
     res_idx as usize
 }
 

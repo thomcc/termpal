@@ -24,10 +24,10 @@ simd-avx = ["simd"]
 # (using `core_detect`) that they're available.
 simd-runtime-avx = ["simd-avx", "core_detect"]
 
-# Works as of 2022-06-10, but 1.5x-2x as slow as intrinsics, and just generally
-# not worth maintaining IMO.
+# I don't care to maintain this while it's unstable, and there's a bug (one
+# which only gets hit for 88color)
 #
-unstable-portable-simd = ["simd"]
+# unstable-portable-simd = ["simd"]
 
 [dependencies]
 core_detect = { version = "1", optional = true }

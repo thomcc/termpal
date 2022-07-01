@@ -8,6 +8,7 @@
 //! distance metric is no longer recommended).
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[repr(C)]
 pub struct OkLab {
     pub l: f32,
     pub a: f32,

@@ -44,7 +44,6 @@ pub(crate) unsafe fn nearest_sse2(l: f32, a: f32, b: f32, palette: &[Lab8]) -> u
 
     // `dists` for the entries of best_chunk. we compare with `best` to
     // figure out the index in `best_chunk`.
-    // let mut best_chunk_dists = _mm_set1_ps(f32::MAX);
     let mut best_dists_x = _mm_set1_ps(f32::MAX);
     let mut best_dists_y = _mm_set1_ps(f32::MAX);
 
@@ -103,7 +102,7 @@ pub(crate) unsafe fn nearest_sse2(l: f32, a: f32, b: f32, palette: &[Lab8]) -> u
             best = _mm_min_ps(best, _mm_shuffle_ps(best, best, shuf![2, 3, 0, 1]));
         }
     }
-    // TODO: this is dumb
+
     let is_y = _mm_movemask_ps(_mm_cmpeq_ps(best, best_dists_y)) != 0;
     let bdist = if is_y {
         best_dists_y
@@ -125,8 +124,8 @@ pub(crate) unsafe fn nearest_sse2(l: f32, a: f32, b: f32, palette: &[Lab8]) -> u
     best_chunk + (MASK_TO_FIRST_INDEX[mask as usize] as usize)
 }
 
-#[target_feature(enable = "avx")]
 #[cfg(feature = "simd-avx")]
+#[target_feature(enable = "avx2")]
 pub(crate) unsafe fn nearest_avx(l: f32, a: f32, b: f32, palette: &[Lab8]) -> usize {
     // static assertions to check that a 3-wide array of 4-wide f32 vector must
     // have same size and align as lab4
@@ -208,13 +207,13 @@ pub(crate) unsafe fn nearest_avx(l: f32, a: f32, b: f32, palette: &[Lab8]) -> us
 }
 
 #[inline]
-#[cfg(all(feature = "simd-runtime-avx", target_feature = "avx"))]
+#[cfg(all(feature = "simd-runtime-avx", target_feature = "avx2"))]
 fn nearest_dynsimd(l: f32, a: f32, b: f32, palette: &[Lab8]) -> usize {
     unsafe { nearest_avx(l, a, b, palette) }
 }
 
 #[inline]
-#[cfg(all(feature = "simd-runtime-avx", not(target_feature = "avx")))]
+#[cfg(all(feature = "simd-runtime-avx", not(target_feature = "avx2")))]
 fn nearest_dynsimd(l: f32, a: f32, b: f32, palette: &[Lab8]) -> usize {
     use core::sync::atomic::{AtomicPtr, Ordering::Relaxed};
     type FindFunc = unsafe fn(f32, f32, f32, &[Lab8]) -> usize;
@@ -222,7 +221,7 @@ fn nearest_dynsimd(l: f32, a: f32, b: f32, palette: &[Lab8]) -> usize {
     static IFUNC: AtomicPtr<()> = AtomicPtr::new(detect as *mut ());
 
     fn detect(l: f32, a: f32, b: f32, palette: &[Lab8]) -> usize {
-        let f: FindFunc = if core_detect::is_x86_feature_detected!("avx") {
+        let f: FindFunc = if core_detect::is_x86_feature_detected!("avx2") {
             nearest_avx
         } else {
             nearest_sse2
@@ -231,6 +230,7 @@ fn nearest_dynsimd(l: f32, a: f32, b: f32, palette: &[Lab8]) -> usize {
         // Safety: we performed detection already.
         unsafe { f(l, a, b, palette) }
     }
+
     // safety: either we're about to do the detection on the call (if it
     // contains `detect` still), or we've already done it (it it contains
     // whatever detect wrote back).
@@ -257,18 +257,18 @@ pub(crate) fn nearest_ansi256_sse2(l: OkLab) -> u8 {
     r as u8 + 16
 }
 
-#[target_feature(enable = "avx")]
 #[cfg(feature = "simd-avx")]
 #[cfg(any(test, benchmarking))]
+#[target_feature(enable = "avx2")]
 pub(crate) unsafe fn nearest_ansi256_unsafe_avx(l: OkLab) -> u8 {
     let r = nearest_avx(l.l, l.a, l.b, &tab::LAB_ROWS_ANSI256);
     debug_assert!(r < 256 - 16, "{}", r);
     r as u8 + 16
 }
 
-#[target_feature(enable = "avx")]
-#[cfg(all(feature = "simd-avx", feature = "88color"))]
 #[cfg(any(test, benchmarking))]
+#[target_feature(enable = "avx2")]
+#[cfg(all(feature = "simd-avx", feature = "88color"))]
 pub(crate) unsafe fn nearest_ansi88_unsafe_avx(l: OkLab) -> u8 {
     let r = nearest_avx(l.l, l.a, l.b, &tab::LAB_ROWS_ANSI88);
     debug_assert!(r < 88 - 16, "{}", r);
@@ -298,9 +298,9 @@ mod test {
     #[ignore] // test with cargo test --release --ignored
     fn test_exhaustive() {
         #[cfg(feature = "simd-runtime-avx")]
-        let have_avx = core_detect::is_x86_feature_detected!("avx");
+        let have_avx = core_detect::is_x86_feature_detected!("avx2");
         #[cfg(not(feature = "simd-runtime-avx"))]
-        let _have_avx = std::is_x86_feature_detected!("avx");
+        let _have_avx = std::is_x86_feature_detected!("avx2");
 
         for r in 0..=255 {
             for g in 0..=255 {

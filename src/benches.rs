@@ -186,6 +186,35 @@ fn nearest_many_searchonly_fallback_256(b: &mut test::Bencher) {
 }
 
 #[bench]
+fn nearest_single_searchonly_kdtree_256(b: &mut test::Bencher) {
+    let mut i = 0;
+    let common_lab = COMMON
+        .iter()
+        .map(|c| rgb2oklab(c.0, c.1, c.2))
+        .collect::<Vec<_>>();
+    b.iter(|| {
+        let (l, a, b) = black_box(common_lab[i]);
+        i = (i + 1) % common_lab.len();
+        let n = crate::imp::kd::nearest_ansi256(Lab { l, a, b });
+        black_box(n);
+    });
+}
+
+#[bench]
+fn nearest_many_searchonly_kdtree_256(b: &mut test::Bencher) {
+    let common_lab = COMMON
+        .iter()
+        .map(|c| rgb2oklab(c.0, c.1, c.2))
+        .collect::<Vec<_>>();
+    b.iter(|| {
+        for &(l, a, b) in &black_box(&common_lab)[..256] {
+            let n = crate::imp::kd::nearest_ansi256(Lab { l, a, b });
+            black_box(n);
+        }
+    });
+}
+
+#[bench]
 #[cfg(feature = "88color")]
 fn nearest_single_searchonly_fallback_88(b: &mut test::Bencher) {
     let mut i = 0;
