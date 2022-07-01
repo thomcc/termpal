@@ -298,7 +298,7 @@ mod test {
     #[ignore] // test with cargo test --release --ignored
     fn test_exhaustive() {
         #[cfg(feature = "simd-runtime-avx")]
-        let have_avx = core_detect::is_x86_feature_detected!("avx2");
+        let _have_avx = core_detect::is_x86_feature_detected!("avx2");
         #[cfg(not(feature = "simd-runtime-avx"))]
         let _have_avx = std::is_x86_feature_detected!("avx2");
 
