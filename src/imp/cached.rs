@@ -1,5 +1,5 @@
 //! Global concurrent (lock-free, wait-free) cache(s) for the nearest color
-//! lookups
+//! lookups.
 //!
 //! These caches sit in front of the full "nearest color" searches, which are
 //! slow enough to warrant caching (even if we have SIMD accelerated versions).
@@ -40,7 +40,7 @@
 //! experience significant performance degradation when at or near capacity.
 //! That is, each one uses a small fixed-size array allocated as a `static`,
 //! which means this code (along with the whole crate, I believe) is fully
-//! no_std compatible and doesn't need any allocation..
+//! no_std compatible and doesn't need any allocation.
 //!
 //! Finally, unlike many concurrent data-structures that can perform key/value
 //! lookups, it didn't even need unsafe[^2].
@@ -247,18 +247,6 @@ const fn mix(mut key: u32) -> u32 {
     key = key.wrapping_add(0xfd7046c5).wrapping_add(key << 3);
     key = (key ^ 0xb55a4f09) ^ (key >> 16);
     key
-}
-
-#[inline]
-#[cfg(anyw)]
-const fn mix3(mut a: u32, mut b: u32, mut c: u32) -> u32 {
-    c = (c ^ b).wrapping_sub(b.rotate_left(14));
-    a = (a ^ c).wrapping_sub(c.rotate_left(11));
-    b = (b ^ a).wrapping_sub(a.rotate_left(25));
-    c = (c ^ b).wrapping_sub(b.rotate_left(16));
-    a = (a ^ c).wrapping_sub(c.rotate_left(4));
-    b = (b ^ a).wrapping_sub(a.rotate_left(14));
-    (c ^ b).wrapping_sub(b.rotate_left(24))
 }
 
 // TODO: consider prepopulating the cache(s) with static data corresponding to

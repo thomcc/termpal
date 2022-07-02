@@ -1,3 +1,8 @@
+//! The impls for the x86. This contains one for SSE2, and one for AVX2.
+//!
+//! Note: I don't remember if I actually used any AVX2 instructions in the AVX
+//! code, or if I stuck to AVX, but out of caution I block it on AVX2
+//! availability.
 use crate::imp::{oklab::*, tab};
 #[cfg(target_arch = "x86")]
 use core::arch::x86::*;
@@ -28,8 +33,9 @@ macro_rules! shuf {
 pub(crate) unsafe fn nearest_sse2(l: f32, a: f32, b: f32, palette: &[Lab8]) -> usize {
     // static assertions to check that a 3-wide array of 4-wide f32 vector must
     // have same size and align as lab4
-    static_assert!(core::mem::size_of::<Lab8>() == core::mem::size_of::<[[__m128; 2]; 3]>());
-    static_assert!(core::mem::align_of::<Lab8>() >= core::mem::align_of::<[[__m128; 2]; 3]>());
+    const _: () = assert!(core::mem::size_of::<Lab8>() == core::mem::size_of::<[[__m128; 2]; 3]>());
+    const _: () =
+        assert!(core::mem::align_of::<Lab8>() >= core::mem::align_of::<[[__m128; 2]; 3]>());
 
     // SAFETY: static assertions above prove safety.
     let chunks: &[[[__m128; 2]; 3]] =
@@ -124,8 +130,9 @@ pub(crate) unsafe fn nearest_sse2(l: f32, a: f32, b: f32, palette: &[Lab8]) -> u
     best_chunk + (MASK_TO_FIRST_INDEX[mask as usize] as usize)
 }
 
+/// note: unsafe because of target_feature
 #[cfg(feature = "simd-avx")]
-#[target_feature(enable = "avx2")] // TODO: might only need plain `avx`.
+#[target_feature(enable = "avx2")] // TODO: turns out this only needs plain `avx`.
 pub(crate) unsafe fn nearest_avx(l: f32, a: f32, b: f32, palette: &[Lab8]) -> usize {
     // static assertions to check that a 3-wide array of 4-wide f32 vector must
     // have same size and align as lab4
@@ -221,7 +228,7 @@ fn nearest_dynsimd(l: f32, a: f32, b: f32, palette: &[Lab8]) -> usize {
     static IFUNC: AtomicPtr<()> = AtomicPtr::new(detect as *mut ());
 
     fn detect(l: f32, a: f32, b: f32, palette: &[Lab8]) -> usize {
-        let f: FindFunc = if core_detect::is_x86_feature_detected!("avx2") {
+        let f: FindFunc = if std::is_x86_feature_detected!("avx2") {
             nearest_avx
         } else {
             nearest_sse2
@@ -297,9 +304,6 @@ mod test {
     #[test]
     #[ignore] // test with cargo test --release --ignored
     fn test_exhaustive() {
-        #[cfg(feature = "simd-runtime-avx")]
-        let _have_avx = core_detect::is_x86_feature_detected!("avx2");
-        #[cfg(not(feature = "simd-runtime-avx"))]
         let _have_avx = std::is_x86_feature_detected!("avx2");
 
         for r in 0..=255 {

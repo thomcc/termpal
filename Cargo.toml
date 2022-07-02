@@ -4,36 +4,63 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
+# By default we turn on (128bit) simd, since it's significantly faster and
+# doesn't come with major downsides. We don't enable 256bit SIMD (`feature =
+# "simd-avx"`) as it has some downsides (downclocking, power usage, and it's
+# kind of overkill) or support for 88-color (`feature = "88color"`) terminals,
+# as they're rare.
 default = ["simd"]
 
 # Support for 88 color terminals, like `xterm-88color`, `rxvt-88color`, etc. Off
-# by default, as they're fairly rare these days, and this reduces table size.
+# by default, as they're fairly rare these days, and this reduces the number of
+# tables needed.
 88color = []
 
-# Use a SIMD-accelerated implementation, if available. On by default.
+# Use a SIMD accelerated search, if we have one for the target, and we know that
+# 128-bit SIMD instructions are available at compile time. This is on by
+# default, as it significantly improves performance, without major downsides.
 simd = []
 
-# When on x86 and/or x86_64 processor, use AVX instructions for the SIMD
-# implementation if we can detect at compile time that they're available. This
-# is off by default, because AVX instructions are a bit of a mixed bag. Until
-# https://github.com/rust-lang/stdarch/pull/1155 stabilizes, the AVX isn't even
-# faster than the SSE2 version either...
+# When on x86 and/or x86_64 processor, use AVX2 instructions (err, I think some
+# of these are avx2. But they might be AVX, I'm just being cautious/lazy) for
+# the SIMD implementation if we can detect at compile time that they're
+# available. On other target architecutures, or if `cfg(target_feature="avx2")`
+# is not true, this does nothing.
+#
+# The AVX impl is around 30% faster than the SSE2 version, but comes at a
+# downside of (usually) reducing your processors clock speed. This tradeoff
+# isn't worth it for most workloads, which go through the cache, and only rarely
+# need to perform the actual search. Because of this, unless you're using the
+# uncached API, it's unlikely that you're going to need to run enough searches
+# make up for the reduced clock speed.
 simd-avx = ["simd"]
 
-# Use AVX instructions for the SIMD implementation if we can detect at runtime
-# (using `core_detect`) that they're available.
-simd-runtime-avx = ["simd-avx", "core_detect"]
-
-# I don't care to maintain this while it's unstable, and there's a bug (one
-# which only gets hit for 88color)
+# Same as `simd-avx`, but performs the test for the AVX2 instructions at runtime
+# rather than compile time. This means you don't have configure
+# `-Ctarget-feature` or `-Ctarget-cpu` to get the benefit, but it means we'll
+# require `std`, so that we can use `std::is_x86_feature_detected!`.
 #
-# unstable-portable-simd = ["simd"]
+# Note that the caveat mentioned for `simd-avx` applies here too -- these
+# instructions can lower your CPUs clock rate, and in typical usage your colors
+# will be in the cache, and you won't end up running the search very often at
+# all. Concretely, you probably shouldn't bother turn this on unless you need to
+# use the apis in `termpal::uncached` (heavily).
+#
+# This, like the `simd-avx` feature, does nothing if your target arch isn't
+# either x86 or x86_64.
+simd-runtime-avx = ["simd-avx", "std"]
+
+# This does nothing on its own, so there's no reason to turn it on directly. It
+# just exists as a flag to indicate that we're enabling a dependency on `libstd`
+# if this is enabled. This will be enabled by `simd-runtime-avx`, as if it's
+# turned, then on we need to use `std::is_x86_feature_detected!("avx2")`.
+std = []
 
 [dependencies]
-core_detect = { version = "1", optional = true }
+# core_detect = { version = "1", optional = true }
 cfg-if = "1"
 
-[dev-dependencies]
+[target.'cfg(benchmarking)'.dev-dependencies]
 ansi_colours = "1.1.1"
 oklab = "1"
 
@@ -48,7 +75,3 @@ codegen-units = 1
 debug-assertions = true
 overflow-checks = true
 opt-level = 2
-
-
-# [workspace]
-# members = [".", "xtask"]

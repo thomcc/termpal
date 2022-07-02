@@ -41,8 +41,8 @@ impl OkLab {
     }
 }
 
-// strictly speaking, our cbrt just needs non-denormals. That said, we test it
-// exhaustively.
+// strictly speaking, our oklab_do_cbrt just cant be fed subnormals, but it's
+// fine to put the bound here for our inputs.
 const CBRT_MIN: f32 = 0.000001;
 
 #[inline]
@@ -52,17 +52,35 @@ fn oklab_cbrt(f: f32) -> f32 {
         assert!(f == 0.0, "{}", f);
         return 0.0;
     }
-    oklab_cbrtf(f)
+    oklab_do_cbrt(f)
 }
 
+// cbrt implementation so that we can be no_std. Also, faster than libm on my
+// machine. Doesn't handle subnormals, which is fine for our case (verified by
+// the fact that we test exhaustively for every `(r, g, b)` triple)
+//
+// doesn't bother with any cases not needed — e.g. basically only good beween 0
+// and 1, but not for subnormals.
+//
+// Note: in practice we're valid for a good ways above 1.0, so if out of gamut
+// inputs show up, it should be fine.
 #[inline]
-#[cfg(any())]
-fn labf(c: f32) -> f32 {
-    if c >= (216.0 / 24389.0) {
-        oklab_cbrtf(c)
-    } else {
-        ((24389.0 / 27.0) * c + 16.0) / 116.0
-    }
+fn oklab_do_cbrt(f: f32) -> f32 {
+    assert!(
+        f != 0.0 && f.is_finite() && f >= CBRT_MIN && f <= 1.0,
+        "{}",
+        f,
+    );
+    // very approximate cbrt to get us in the ballpark
+    let a = f32::from_bits(f.to_bits() / 3 + 0x2a51_19f2);
+    // several rounds of halleys method in higher precision gets us to half-ulp
+    // (overkill, tbh)
+    let (a, f) = (a as f64, f as f64);
+    let aaa = a * a * a;
+    let a = a * (f + f + aaa) / (f + aaa + aaa);
+    let aaa = a * a * a;
+    let a = a * (f + f + aaa) / (f + aaa + aaa);
+    a as f32
 }
 
 #[rustfmt::skip]
@@ -101,98 +119,6 @@ static SRGB_TAB: super::A64<[f32; 256]> = super::A64([
     0.93011117, 0.9386859, 0.9473069, 0.9559735, 0.9646866, 0.9734455, 0.98225087, 0.9911022, 1.0,
 ]);
 
-// cbrt implementation so that we can be no_std. Also, a little faster than
-// the one in libm on my machine (only a little).
-//
-// doesn't bother with any cases not needed — e.g. basically only good beween
-// 0 and 1, but not for subnormals.
-//
-// Note: in practice we're valid for a good ways above 1.0, so if out of gamut
-// inputs show up, it should be fine.
-#[inline]
-fn oklab_cbrtf(f: f32) -> f32 {
-    assert!(
-        f != 0.0 && f.is_finite() && f >= CBRT_MIN && f <= 1.0,
-        "{}",
-        f,
-    );
-    #[cfg(any())]
-    {
-        const C: f32 = 5.4285717010e-01;
-        const D: f32 = -7.0530611277e-01;
-        const E: f32 = 1.4142856598e+00;
-        const F: f32 = 1.6071428061e+00;
-        const G: f32 = 3.5714286566e-01;
-        let b1 = 709958130;
-        let mut hx = f.to_bits();
-        let sgn = hx & 0x8000_0000;
-        hx ^= sgn;
-        let f = f32::from_bits(hx);
-        if (hx & 0x7f800000) == 0 {}
-        let mut t = f32::from_bits((hx / 3).wrapping_add(b1));
-        let r = t * t / f;
-        let s = C + r * t;
-        t *= G + F / (s + E + D / s);
-        return f32::from_bits(t.to_bits() | sgn);
-    }
-    #[cfg(any())]
-    {
-        #[inline]
-        fn cbrt5f(x: f32) -> f32 {
-            f32::from_bits((x.to_bits() / 3).wrapping_add(709921077))
-        }
-        #[inline]
-        fn cbrta_halleyf(a: f32, r: f32) -> f32 {
-            let a3 = a * a * a;
-            a * (a3 + r + r) / (a3 + a3 + r)
-        }
-        let a = cbrt5f(f);
-        let a = cbrta_halleyf(a, f);
-        let a = cbrta_halleyf(a, f);
-        return a;
-    }
-    #[cfg(any())]
-    {
-        let x = f;
-        let mut ui = x.to_bits();
-        ui = (ui / 4).wrapping_add(ui / 16);
-        ui = ui.wrapping_add(ui / 16);
-        ui = ui.wrapping_add(ui / 256);
-        ui = ui.wrapping_add(0x2a5137a0);
-        let mut uf = f32::from_bits(ui);
-        uf = 0.33333333f32 * (2.0f32 * uf + x / (uf * uf));
-        uf = 0.33333333f32 * (2.0f32 * uf + x / (uf * uf));
-        return uf;
-    }
-
-    #[cfg(any())]
-    {
-        // rough cbrt — probably only correct to around 5 bits
-        let a = f32::from_bits(f.to_bits() / 3 + 0x2a51_19f2);
-        // this (disabled) version is less accurate — error of up to 4ulps, just
-        // in the range we care about. it would be easier to simd tho, and
-        // if cbrt were more of a bottleneck it would be worth considering
-        let r = a * a / f;
-        let s = r * a + 19.0 / 35.0;
-        let d = s + 99.0 / 70.0 + (-864.0 / 1225.0) / s;
-        let k = 5.0 / 14.0 + (45.0 / 28.0) / d;
-        return a * k;
-    }
-    // #[cfg(any())]
-    {
-        // rough cbrt — probably only correct to around 5 bits
-        let a = f32::from_bits(f.to_bits() / 3 + 0x2a51_19f2);
-        // the version we use just does stuff in double precision, and has a really
-        // tight error bound, < 1 ulp i think.
-        let (a, f) = (a as f64, f as f64);
-        let aaa = a * a * a;
-        let a = a * (f + f + aaa) / (f + aaa + aaa);
-        let aaa = a * a * a;
-        let a = a * (f + f + aaa) / (f + aaa + aaa);
-        a as f32
-    }
-}
-
 // check that we have exactly the system value for the whole range
 // we can accept.
 #[test]
@@ -205,7 +131,7 @@ fn test_cbrtf() {
     for i in min.to_bits()..=1.0f32.to_bits() {
         let f = f32::from_bits(unsafe { core::ptr::read_volatile(&i) });
         let libm = f.cbrt();
-        let mine = oklab_cbrtf(f);
+        let mine = oklab_do_cbrt(f);
         let ulp = (libm.to_bits() as i32 - mine.to_bits() as i32).abs();
         if ulp > maxulp.0 {
             maxulp = (ulp, f, libm, mine);

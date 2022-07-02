@@ -2,6 +2,9 @@
 
 Convert from a 24-bit RGB color to the nearest color supported by a terminal that only supports 256 colors, 88 colors terminals -- things like `xterm-256color`, `rxvt-88color`, and similar.
 
+WIP.
+
+<!--
 This crate is very focused. It does not handle detecting the colors supported by a given terminal, nor does it handle the actual styling of text.
 
 It does this 
@@ -157,3 +160,4 @@ So that you can compare: `rgb-to-ansi` uses MIT/Apache-2.0/ZLIB (whichever you p
 In its favor, `ansi_colours` is very fast. I wouldn't have had to work nearly as hard as I did if it weren't, and even after all the optimizations, `ansi_colours` is still about 2x faster than `rgb-to-ansi` on my machine.
 
 However, a performance hit of 2x is probably acceptable for this — we're talking `25ns` vs `13ns` at this point. Also, if all your reads are in the global cache.
+-->

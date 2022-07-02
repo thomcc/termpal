@@ -4,6 +4,10 @@ macro_rules! static_assert {
     };
 }
 
+// On M1 the kd tree is faster than naive search (`mod fallback`), but slower
+// than the SIMD impl. On everything else I've tried it's universally slower.
+// TODO: remove.
+#[cfg(benchmarking)]
 pub(crate) mod kd;
 
 // These would fail `#[cfg(target_has_atomic_load_store="32")]`, which isn't
@@ -12,8 +16,6 @@ pub(crate) mod kd;
 // build.rs detecting these). Right now this is the only way we won't use the
 // cache — as optimized as the fallback is, the cache is pretty important for
 // perf.
-
-// #[cfg(not(any(target_arch = "msp430", target_arch = "avr", rgb_to_ansi_no_atomics)))]
 
 // Actually, we only need `target_has_atomic_load_store = "32"`.
 #[cfg(target_has_atomic = "32")]
@@ -40,11 +42,6 @@ pub(crate) mod tab;
 ))]
 #[path = "simd/x86.rs"]
 pub(crate) mod simd_x86;
-
-// #[cfg(all(feature = "unstable-portable-simd"))]
-// #[path = "simd/stdsimd.rs"]
-// #[allow(dead_code)]
-// pub(crate) mod simd_portable;
 
 #[cfg(all(
     feature = "simd",

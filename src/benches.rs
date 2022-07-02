@@ -540,7 +540,7 @@ items! {
     #[bench]
     #[cfg(feature = "simd-avx")]
     fn nearest_single_full_avx_256(b: &mut test::Bencher) {
-        assert!(core_detect::is_x86_feature_detected!("avx"));
+        assert!(std::is_x86_feature_detected!("avx2"));
         let mut i = 0;
         b.iter(|| {
             let (r, g, b) = black_box(COMMON[i]);
@@ -556,7 +556,7 @@ items! {
     #[cfg(feature = "88color")]
     #[cfg(feature = "simd-avx")]
     fn nearest_single_full_avx_88(b: &mut test::Bencher) {
-        assert!(core_detect::is_x86_feature_detected!("avx"));
+        assert!(std::is_x86_feature_detected!("avx2"));
         let mut i = 0;
         b.iter(|| {
             let (r, g, b) = black_box(COMMON[i]);
@@ -571,7 +571,7 @@ items! {
     #[bench]
     #[cfg(feature = "simd-avx")]
     fn nearest_single_searchonly_avx_256(b: &mut test::Bencher) {
-        assert!(core_detect::is_x86_feature_detected!("avx"));
+        assert!(std::is_x86_feature_detected!("avx2"));
         let mut i = 0;
         let common_lab = COMMON
             .iter()
@@ -641,6 +641,22 @@ items! {
 
     #[bench]
     #[cfg(feature = "88color")]
+    fn nearest_single_searchonly_sse2_88(b: &mut test::Bencher) {
+        let mut i = 0;
+        let common_lab = COMMON
+            .iter()
+            .map(|c| rgb2oklab(c.0, c.1, c.2))
+            .collect::<Vec<_>>();
+        b.iter(|| {
+            let (l, a, b) = black_box(common_lab[i]);
+            i = (i + 1) % common_lab.len();
+            let n = simd_x86::nearest_ansi88_sse2(Lab { l, a, b });
+            black_box(n);
+        });
+    }
+
+    #[bench]
+    #[cfg(feature = "88color")]
     fn nearest_many_searchonly_sse2_88(b: &mut test::Bencher) {
         let common_lab = COMMON
             .iter()
@@ -657,7 +673,7 @@ items! {
     #[bench]
     #[cfg(feature = "simd-avx")]
     fn nearest_many_searchonly_avx_256(b: &mut test::Bencher) {
-        assert!(core_detect::is_x86_feature_detected!("avx"));
+        assert!(std::is_x86_feature_detected!("avx2"));
         let common_lab = COMMON
             .iter()
             .map(|c| rgb2oklab(c.0, c.1, c.2))
@@ -674,7 +690,7 @@ items! {
     #[cfg(feature = "simd-avx")]
     #[cfg(feature = "88color")]
     fn nearest_many_searchonly_avx_88(b: &mut test::Bencher) {
-        assert!(core_detect::is_x86_feature_detected!("avx"));
+        assert!(std::is_x86_feature_detected!("avx2"));
         let common_lab = COMMON
             .iter()
             .map(|c| rgb2oklab(c.0, c.1, c.2))
@@ -1145,3 +1161,36 @@ static COMMON: [(u8, u8, u8); 361] = [
     (0xff, 0xff, 0xf8),
     (0xff, 0xff, 0xff),
 ];
+
+/*
+test benches::lookup_many_256_ours                     ... bench:       1,576 ns/iter (+/- 108)
+test benches::lookup_many_88_ours                      ... bench:       1,567 ns/iter (+/- 46)
+test benches::lookup_single_256_ours                   ... bench:           9 ns/iter (+/- 0)
+test benches::lookup_single_88_ours                    ... bench:          12 ns/iter (+/- 0)
+test benches::lookup_many_256_theirs__ansi_colours     ... bench:       1,624 ns/iter (+/- 34)
+test benches::lookup_single_256_theirs__ansi_colours   ... bench:           7 ns/iter (+/- 0)
+test benches::lookup_many_uncached_256                 ... bench:      21,402 ns/iter (+/- 649)
+test benches::lookup_many_uncached_88                  ... bench:      11,842 ns/iter (+/- 268)
+test benches::lookup_single_uncached_256               ... bench:          86 ns/iter (+/- 2)
+test benches::lookup_single_uncached_88                ... bench:          48 ns/iter (+/- 0)
+test benches::nearest_single_full_fallback_256         ... bench:         322 ns/iter (+/- 6)
+test benches::nearest_single_full_fallback_88          ... bench:         105 ns/iter (+/- 1)
+test benches::nearest_single_full_neon_256             ... bench:          94 ns/iter (+/- 1)
+test benches::nearest_single_full_neon_88              ... bench:          52 ns/iter (+/- 1)
+test benches::nearest_many_searchonly_fallback_256     ... bench:      71,127 ns/iter (+/- 2,077)
+test benches::nearest_many_searchonly_fallback_88      ... bench:      17,365 ns/iter (+/- 380)
+test benches::nearest_single_searchonly_fallback_256   ... bench:         287 ns/iter (+/- 43)
+test benches::nearest_single_searchonly_fallback_88    ... bench:          68 ns/iter (+/- 1)
+test benches::nearest_many_searchonly_kdtree_256       ... bench:      27,907 ns/iter (+/- 2,016)
+test benches::nearest_many_searchonly_kdtree_88        ... bench:      19,361 ns/iter (+/- 772)
+test benches::nearest_single_searchonly_kdtree_256     ... bench:         108 ns/iter (+/- 20)
+test benches::nearest_single_searchonly_kdtree_88      ... bench:          74 ns/iter (+/- 3)
+test benches::nearest_many_searchonly_neon_256         ... bench:      15,591 ns/iter (+/- 194)
+test benches::nearest_many_searchonly_neon_88          ... bench:       4,949 ns/iter (+/- 189)
+test benches::nearest_single_searchonly_neon_256       ... bench:          61 ns/iter (+/- 0)
+test benches::nearest_single_searchonly_neon_88        ... bench:          22 ns/iter (+/- 0)
+test benches::srgb_to_oklab_many_ours                  ... bench:       3,250 ns/iter (+/- 56)
+test benches::srgb_to_oklab_many_theirs__oklab_crate   ... bench:      11,733 ns/iter (+/- 655)
+test benches::srgb_to_oklab_single_ours                ... bench:          13 ns/iter (+/- 0)
+test benches::srgb_to_oklab_single_theirs__oklab_crate ... bench:          47 ns/iter (+/- 1)
+ */
