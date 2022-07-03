@@ -20,7 +20,7 @@
 //! A "cache table" is basically a hash table which is allowed to forget
 //! entries. In this implementation, there are a large number of buckets, and
 //! each bucket holds a small 2-item buffer (hence "×2"), for entries that map
-//! to the same hash index. If the buffer/bucket is full when a anew entry is
+//! to the same hash index. If the buffer/bucket is full when a new entry is
 //! inserted, then an older entry will be evicted. Which entry is evicted is
 //! currently chosen pseudo-randomly, although this may change.
 //!
@@ -103,7 +103,7 @@
 //!     pick randomly. This is imperfect, but honestly, it's good enough.
 //!
 //!     Note that while hash codes are (ideally) pseudorandom, I need to be
-//!     somewhat careful here: using something tied directly to to the cache key
+//!     somewhat careful here: using something tied directly to the cache key
 //!     (such as the hashcode of `(r, g, b)`, the hash code of the entry, etc)
 //!     will make this into a 2N×1-way cache rather than N×2-way, which is more
 //!     likely to suffer from collisions.
@@ -251,7 +251,7 @@ const fn mix(mut key: u32) -> u32 {
 
 // TODO: consider prepopulating the cache(s) with static data corresponding to
 // popular color schemes. This is kind of hairy and may require tweaking the
-// cache algorithm's logic (I don't really remember what I mean't by this, but
+// cache algorithm's logic (I don't really remember what I meant by this, but
 // I'm going to leave it for now).
 static CACHE256: CacheTab<1024> = CacheTab::new();
 

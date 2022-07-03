@@ -9,7 +9,7 @@
 //!
 //! Similarly, for many terminals, even if they *do* support 24-bit ANSI
 //! escapes, they may use a naïve conversion -- often one which is neither sRGB
-//! correct nor perceptually accurate. s a result your program may look very
+//! correct nor perceptually accurate. As a result your program may look very
 //! different when this is unavailable. Even if it did get this right (and I'm
 //! not aware of any that do -- although this may be more because most terminals
 //! actually )

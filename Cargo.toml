@@ -43,7 +43,7 @@ simd-avx = ["simd"]
 # Note that the caveat mentioned for `simd-avx` applies here too -- these
 # instructions can lower your CPUs clock rate, and in typical usage your colors
 # will be in the cache, and you won't end up running the search very often at
-# all. Concretely, you probably shouldn't bother turn this on unless you need to
+# all. Concretely, you probably shouldn't bother to turn this on unless you need to
 # use the apis in `termpal::uncached` (heavily).
 #
 # This, like the `simd-avx` feature, does nothing if your target arch isn't
@@ -53,7 +53,7 @@ simd-runtime-avx = ["simd-avx", "std"]
 # This does nothing on its own, so there's no reason to turn it on directly. It
 # just exists as a flag to indicate that we're enabling a dependency on `libstd`
 # if this is enabled. This will be enabled by `simd-runtime-avx`, as if it's
-# turned, then on we need to use `std::is_x86_feature_detected!("avx2")`.
+# turned on, then we need to use `std::is_x86_feature_detected!("avx2")`.
 std = []
 
 [dependencies]
